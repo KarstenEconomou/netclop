@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "tranetclu"
+name = "netclop"
 version = "0.2.0"
 description = "Transport network clustering operations"
 authors = ["KarstenEconomou <KarstenEconomou@dal.ca>"]
@@ -19,5 +19,5 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-makenet = "tranetclu.cli:make_net"
-partition = "tranetclu.cli:partition"
+makenet = "netclop.cli:make_net"
+partition = "netclop.cli:partition"
