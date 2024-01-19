@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "tranetclu"
+version = "0.1.0"
+description = "Transport network clustering operations"
+authors = ["KarstenEconomou <KarstenEconomou@dal.ca>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+click = "^8.1.7"
+numpy = "^1.26.3"
+networkx = "^3.2.1"
+h3 = "^3.7.6"
+pandas = "^2.1.4"
+infomap = "^2.7.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+makenet = "tranetclu.cli:make"
+cluster = "tranetclu.cli:partition"
