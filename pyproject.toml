@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tranetclu"
-version = "0.1.0"
+version = "0.2.0"
 description = "Transport network clustering operations"
 authors = ["KarstenEconomou <KarstenEconomou@dal.ca>"]
 readme = "README.md"
@@ -10,7 +10,7 @@ python = "^3.12"
 click = "^8.1.7"
 numpy = "^1.26.3"
 networkx = "^3.2.1"
-h3 = "^3.7.6"
+h3 = "4.0.0b2"
 pandas = "^2.1.4"
 infomap = "^2.7.1"
 
@@ -19,5 +19,5 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-makenet = "tranetclu.cli:make"
-cluster = "tranetclu.cli:partition"
+makenet = "tranetclu.cli:make_net"
+partition = "tranetclu.cli:partition"
