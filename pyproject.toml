@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "netclop"
-version = "0.3.0"
-description = "Transport network clustering operations"
-authors = ["KarstenEconomou <KarstenEconomou@dal.ca>"]
+version = "0.4.0"
+description = "NETwork CLustering OPerations for geophysical fluid transport"
+authors = ["KarstenEconomou <economoukarsten@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
@@ -24,4 +24,3 @@ build-backend = "poetry.core.masonry.api"
 construct = "netclop.cli:construct_net"
 partition = "netclop.cli:partition"
 plot = "netclop.cli:plot"
-quickview = "netclop.cli:quick_plot"
