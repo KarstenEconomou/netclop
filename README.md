@@ -20,7 +20,7 @@ Particle trajectories must be decomposed into initial and final latitude and lon
 construct coords.csv -o network.csv -res [RES]
 ```
 
-## Partition network
+### Partition network
 
 Weighted, directed networks are represented as an edge list `source node,target node,weight,normalized weight` where the normalized edge weight is such that outgoing edges from each node sum to unity (or zero). Clustering is done using [Infomap](https://github.com/mapequation/infomap) with `-n` outer-loop trials, `-mt` Markov time, and `-s` random seed.
 
@@ -28,7 +28,7 @@ Weighted, directed networks are represented as an edge list `source node,target 
 partition network.csv -o modules.csv -n [NUM TRIALS] -mt [MARKOV TIME] -s [SEED]
 ```
 
-## Plot modular structure
+### Plot modular structure
 
 Modular descriptions of networks are a node list `node,module,node metric 1,node metric 2,...`. They can be plotted simply with
 ```
