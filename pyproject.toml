@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "netclop"
-version = "0.4.2"
+version = "0.5.0"
 description = "NETwork CLustering OPerations for geophysical fluid transport"
 authors = ["KarstenEconomou <economoukarsten@gmail.com>"]
 readme = "README.md"
@@ -21,6 +21,4 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-construct = "netclop.cli:construct_net"
-partition = "netclop.cli:partition"
-plot = "netclop.cli:plot"
+netclop = "netclop.cli:netclop"

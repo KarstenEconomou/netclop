@@ -7,7 +7,7 @@ from netclop.plot import Plot
 def netclop():
     pass
 
-@netclop.command()
+@netclop.command(name="construct")
 @click.argument("in-file",
     type=click.Path(exists=True),
     required=True
@@ -31,7 +31,7 @@ def construct_net(in_file: click.Path, out_file: click.Path, resolution: int) ->
     if out_file is not None:
         net.to_file(out_file)
 
-@netclop.command()
+@netclop.command(name="partition")
 @click.argument("in-file",
     type=click.Path(exists=True),
     required=True
@@ -76,7 +76,7 @@ def partition(
     if out_file is not None:
         net.partition_to_file(out_file)
 
-@netclop.command()
+@netclop.command(name="plot")
 @click.argument("in-file",
     type=click.Path(exists=True),
     required=True,
