@@ -66,9 +66,9 @@ class GeoPlot:
     @classmethod
     def from_file(cls, path: click.Path, cull_trivial: bool = False) -> typing.Self:
         """Make GeoDataFrame from file."""
-        df = pd.read_csv(path, index_col=False, names=["node", "module", "flow"])
+        df = pd.read_csv(path, index_col=False)
         return cls.from_df(df, cull_trivial=cull_trivial)
-    
+
     @classmethod
     def from_df(cls, df: pd.DataFrame, cull_trivial: bool = False) -> typing.Self:
         """Make GeoDataFrame from DataFrame."""
