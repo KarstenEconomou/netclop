@@ -36,3 +36,6 @@ netclop plot modules.csv
 ```
 
 ### Significance cluster
+```
+netclop sigclu network.csv
+```
