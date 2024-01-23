@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "netclop"
-version = "0.5.0"
+version = "0.6.0"
 description = "NETwork CLustering OPerations for geophysical fluid transport"
 authors = ["KarstenEconomou <economoukarsten@gmail.com>"]
 readme = "README.md"

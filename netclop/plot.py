@@ -1,3 +1,4 @@
+"""Defines the GeoPlot class."""
 import click
 import dataclasses
 import typing
@@ -9,7 +10,7 @@ import plotly.express as px
 import shapely
 
 @dataclasses.dataclass
-class Plot:
+class GeoPlot:
     """Geospatial plotting."""
     gdf: gpd.GeoDataFrame
 
