@@ -8,34 +8,41 @@ brew install pipx
 pipx ensurepath
 ```
 
+To install:
 ```
 pipx install netclop
 ```
 
-## Functions
-### Construct network
-Particle trajectories must be decomposed into initial and final latitude and longitude coordinates in the form `initial latitude,initial longitude,final latitude,final longitude`. Positions are binned with [h3](https://github.com/uber/h3-py) with specified `-res`.
-
+To upgrade:
 ```
-netclop construct coords.csv -o network.csv -res [RES]
+pipx upgrade netclop
 ```
 
-### Partition network
-
-Weighted, directed networks are represented as an edge list `source node,target node,weight,normalized weight` where the normalized edge weight is such that outgoing edges from each node sum to unity (or zero). Clustering is done using [Infomap](https://github.com/mapequation/infomap) with `-n` outer-loop trials, `-mt` Markov time, and `-s` random seed.
+## Use
+Particle trajectories must be decomposed into initial and final latitude and longitude coordinates and stored in a positions file in the form `initial_latitude,initial_longitude,final_latitude,final_longitude`. Positions are binned with [H3](https://github.com/uber/h3-py). Community detection uses [Infomap](https://github.com/mapequation/infomap).
 
 ```
-netclop partition network.csv -o modules.csv -n [NUM TRIALS] -mt [MARKOV TIME] -s [SEED]
-```
-
-### Plot modular structure
-
-Modular descriptions of networks are a node list `node,module,node metric 1,node metric 2,...`. They can be plotted simply with
-```
-netclop plot modules.csv
+netclop [OPTIONS] COMMAND [ARGS]
 ```
 
-### Significance cluster
+### Options
+* `--config` Path to a custom configuration YAML file
+
+### Commands
+
+#### Stream
+Performs significance clustering on network modular structure from positions. Saves results and plots.
+
 ```
-netclop sigclu network.csv
+netclop stream POSITIONS_PATH --output OUTPUT_PATH
 ```
+* `POSITIONS_PATH` Path to the positions file
+* `--output OUTPUT_PATH` Path to the output file where the node list will be written
+
+#### Plot
+Plots a node list.
+
+```
+netclop plot NODE_PATH
+```
+* `NODE_PATH` Path to a node list. Node names must be integer H3 indices.

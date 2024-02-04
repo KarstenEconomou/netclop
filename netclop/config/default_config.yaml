@@ -1,0 +1,23 @@
+defaults: &defaults
+  seed: 12  # PRNG seed
+
+binning:
+  res: 5  # H3 bin resolution (0-15)
+
+infomap:
+  <<: *defaults
+  num_trials: 10
+  markov_time: 2.0
+  variable_markov_time: true
+
+bootstrap:
+  <<: *defaults
+  num_bootstraps: 1000
+
+sig_clu:
+  <<: *defaults
+  sig: 0.05  # Significance level for clustering
+  pen_weight: 1.0
+  temp_init: 1.0
+  cool_rate: 0.1
+  iter_max: 1000  # Maximum number of iterations

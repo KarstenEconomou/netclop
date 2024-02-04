@@ -1,181 +1,111 @@
 """Command line interface."""
-import click
+import functools
 
-from .constants import DEFAULT_BIN_CONFIG, DEFAULT_PART_CONFIG, DEFAULT_BS_CONFIG, DEFAULT_SC_CONFIG
+import click
+import numpy as np
+
+from .config_loader import load_config
 from .networkops import NetworkOps
 from .plot import GeoPlot
 
-@click.group()
-def netclop():
-    pass
+DEF_CFG = load_config()
+
+
+@click.group(invoke_without_command=True)
+@click.option(
+    '--config', 
+    "config_path",
+    type=click.Path(exists=True), 
+    help="Path to custom configuration file."
+)
+@click.pass_context
+def netclop(ctx, config_path):
+    """Netclop CLI."""
+    if ctx.obj is None:
+        ctx.obj = {}
+    cfg = load_config()
+    if config_path:
+        cfg.update(load_config(config_path))
+    ctx.obj["cfg"] = cfg
+
+
+def path_options(f):
+    """Specify input and output arguments."""
+    @click.argument(
+    "input-path", 
+    type=click.Path(exists=True),
+    )
+    @click.option(
+        "--output", 
+        "-o",
+        "output_path", 
+        type=click.Path(),
+        required=True,
+        help="Output file.",
+    )
+    @functools.wraps(f)
+    def wrapper_path_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_path_options
+
 
 @netclop.command(name="construct")
-@click.argument("in-file",
-    type=click.Path(exists=True),
-    required=True
-)
-@click.option("--out-file", "-o",
-    type=click.Path(),
-    default=None,
-    required=False,
-    help="File to write network to."
-)
-@click.option("--resolution", "-res",
+@path_options
+@click.option(
+    "--res",
     type=int,
-    default=DEFAULT_BIN_CONFIG["res"],
+    default=DEF_CFG["binning"]["res"],
     show_default=True,
-    required=False,
-    help="H3 grid resolution (0-15) for domain discretization."
+    help="H3 grid resolution (0-15) for domain discretization.",
 )
-def construct_net(in_file: click.Path, out_file: click.Path, resolution: int) -> None:
-    """Constructs a network from particle positions."""
-    net = NetworkOps.from_locations(in_file, resolution)
-    if out_file is not None:
-        net.edge_list_to_file(out_file)
+@click.pass_context
+def construct_net(ctx, input_path, output_path, res):
+    """Constructs a network from LPT positions."""
+    netops = NetworkOps(ctx.obj["cfg"])
+    net = netops.from_positions(input_path)
+    netops.write_edgelist(net, output_path)
 
-@netclop.command(name="partition")
-@click.argument("in-file",
-    type=click.Path(exists=True),
-    required=True
-)
-@click.option("--out-file", "-o",
-    type=click.Path(),
-    default=None,
-    required=False,
-    help="File to write partition to.",
-)
-@click.option("--num-trials", "-n",
-    type=int,
-    default=DEFAULT_PART_CONFIG["num_trials"],
-    show_default=True,
-    required=False,
-    help="Number of outer trials to perform.",
-)
-@click.option("--markov-time", "-mt",
-    type=float,
-    default=DEFAULT_PART_CONFIG["markov_time"],
-    show_default=True,
-    required=False,
-    help="Markov time spatial scale tuning parameter.",
-)
-@click.option("--seed", "-s",
-    type=int,
-    default=DEFAULT_PART_CONFIG["seed"],
-    show_default=True,
-    required=False,
-    help="Random seed.",
-)
-def partition(
-    in_file: click.Path,
-    out_file: click.Path,
-    num_trials: int,
-    markov_time: float,
-    seed: int,
-) -> None:
-    """Clusters a network."""
-    net = NetworkOps.from_file(
-        in_file,
-        part_config={
-        "num_trials": num_trials,
-        "markov_time": markov_time, 
-        "seed": seed
-        },
-    )
-    net.partition(path=out_file)
 
-@netclop.command(name="sigclu")
-@click.argument("in-file",
-    type=click.Path(exists=True),
-    required=True,
-)
-@click.option("--out-file", "-o",
-    type=click.Path(),
-    default=None,
-    required=False,
-    help="File to write node list to."
-)
-@click.option("--num-trials", "-n",
-    type=int,
-    default=DEFAULT_PART_CONFIG["num_trials"],
-    show_default=True,
-    required=False,
-    help="Number of outer trials to perform.",
-)
-@click.option("--markov-time", "-mt",
-    type=float,
-    default=DEFAULT_PART_CONFIG["markov_time"],
-    show_default=True,
-    required=False,
-    help="Markov time spatial scale tuning parameter.",
-)
-@click.option("--seed", "-s",
-    type=int,
-    default=DEFAULT_PART_CONFIG["seed"],
-    show_default=True,
-    required=False,
-    help="Random seed.",
-)
-@click.option("--var-tune",
-    type=float,
-    default=DEFAULT_BS_CONFIG["tuning_param"],
-    show_default=True,
-    required=False,
-    help="Variance tuning parameter for resampling.",
-)
-@click.option("--penalty-weight", "-pen",
-    type=float,
-    default=DEFAULT_SC_CONFIG["pen_weight"],
-    show_default=True,
-    required=False,
-    help="Penalty weight in scoring solutions.",
-)
-@click.option("--cool-rate", "-cr",
-    type=float,
-    default=DEFAULT_SC_CONFIG["cool_rate"],
-    show_default=True,
-    required=False,
-    help="Cooling rate for simulated annealing schedule.",
-)
-def sigclu(
-    in_file: click.Path,
-    out_file: click.Path,
-    num_trials: int,
-    markov_time: float,
-    seed: int,
-    var_tune: float,
-    penalty_weight: float,
-    cool_rate: float,
-) -> None:
-    """Finds the significant cores of network modular structure."""
-    net = NetworkOps.from_file(
-        in_file,
-        part_config={
-        "num_trials": num_trials,
-        "markov_time": markov_time, 
-        "seed": seed,
-        },
-        bs_config={
-        "tuning_param": var_tune,
-        "size": DEFAULT_BS_CONFIG["size"],
-        "seed": seed,
-        },
-        sc_config={
-        "conf": 0.05,
-        "pen_weight": penalty_weight,
-        "temp_init": DEFAULT_SC_CONFIG["temp_init"],
-        "iter_max": DEFAULT_SC_CONFIG["iter_max"],
-        "seed": seed,
-        "cool_rate": cool_rate,
-        },
-    )
-    net.significance_cluster(out_file)
+@netclop.command(name="stream")
+@path_options
+@click.pass_context
+def stream(ctx, input_path, output_path):
+    """Runs significance clustering directly from LPT positions."""
+    netops = NetworkOps(ctx.obj["cfg"])
+
+    net = netops.from_positions(input_path)
+    netops.partition(net)
+
+    bootstrap_nets = netops.make_bootstraps(net)
+    for bootstrap in bootstrap_nets:
+        netops.partition(bootstrap, node_info=False)
+
+    partition = netops.group_nodes_by_module(net)
+    bootstrap_partitions = [netops.group_nodes_by_module(bs_net) for bs_net in bootstrap_nets]
+
+    counts = [len(bs_part) for bs_part in bootstrap_partitions]
+    print(f"Partitioned into {np.mean(counts):.1f} +/- {np.std(counts):.1f} modules")
+
+    cores = netops.significance_cluster(partition, bootstrap_partitions)
+
+    netops.compute_node_measures(net, cores)
+    netops.write_nodelist(net, output_path)
+
+    gplt = GeoPlot.from_file(output_path)
+    gplt.plot()
+
 
 @netclop.command(name="plot")
-@click.argument("in-file",
+@click.argument(
+    "input-path", 
     type=click.Path(exists=True),
     required=True,
-)
-def plot(in_file: click.Path) -> None:
-    """Plots a network partition."""
-    plt = GeoPlot.from_file(in_file)
-    plt.plot()
+    )
+def plot(input_path):
+    """Plots nodes."""
+    gplt = GeoPlot.from_file(input_path)
+    gplt.plot()
+
+if __name__ == '__main__':
+    netclop(obj={})
