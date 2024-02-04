@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import shapely
 
-from .constants import Partition, Path
+from .constants import Path
 
 @dataclasses.dataclass
 class GeoPlot:
@@ -18,11 +18,11 @@ class GeoPlot:
     gdf: gpd.GeoDataFrame
     fig: go.Figure = dataclasses.field(init=False)
 
-    def plot(self) -> None:
+    def plot(self, delineate_noise: bool = True) -> None:
         """Plot modular structure."""
         gdf = self.gdf
 
-        modular_color_map = self._color_modules()
+        modular_color_map = self._color_modules(delineate_noise)
         self.fig = px.choropleth(
             gdf,
             geojson=gdf.geometry,
@@ -33,6 +33,12 @@ class GeoPlot:
             custom_data=["node", "module"],
             color_discrete_map=modular_color_map,
         )
+        self._set_traces()
+        self._set_geos()
+        self._set_layout()
+        self.fig.show()
+
+    def _set_traces(self) -> None:
         self.fig.update_traces(
             marker={"opacity": 1.},
             hovertemplate=
@@ -42,10 +48,6 @@ class GeoPlot:
             + "<extra></extra>",
         )
 
-        self._set_geos()
-        self._set_layout()
-        self.fig.show()
-
     def _set_layout(self) -> None:
         self.fig.update_layout(
             margin={"r": 0,"t": 0,"l": 0,"b": 0},
@@ -54,12 +56,12 @@ class GeoPlot:
                 "font_size": 14,
                 "font_family": "Arial"
             },
-            legend=dict(
-                yanchor="top",
-                y=0.95,
-                xanchor="left",
-                x=0.01,
-            ),
+            legend={
+                "yanchor": "top",
+                "y": 0.95,
+                "xanchor": "left",
+                "x": 0.01,
+            },
             legend_title="Module",
         )
 
@@ -74,13 +76,11 @@ class GeoPlot:
             oceancolor="white",
         )
 
-    def _color_modules(self) -> dict[str, str]:
+    def _color_modules(self, delineate_noise: bool = True) -> dict[str, str]:
         """Assigns color to modules and noise."""
         gdf = self.gdf
         gdf["module"] = gdf["module"].astype(str)
 
-        noise_label = "Noise"
-        noise_color = "#e6e6e6"
         module_color_mapping = {
             "1": "#636EFA",
             "2": "#EF553B",
@@ -94,25 +94,38 @@ class GeoPlot:
             "10": "#FECB52",
         }
 
-        gdf["label"] = gdf.apply(
-            lambda x: x["module"] if x["significant"] else noise_label,
-            axis=1
-        )
+        if delineate_noise:
+            if "significant" not in gdf.columns:
+                raise ValueError(
+                    "The node list must contain a 'significant' column to delineate noise."
+                )
+            noise_label = "Noise"
+            noise_color = "#e6e6e6"
+            module_color_mapping[noise_label] = noise_color
 
-        # Sort labels
-        sort_key = pd.Categorical(
-        gdf['label'],
-        categories=sorted(gdf['label'].unique(), key=lambda x: (x == noise_label, x)),
-        ordered=True
-        )
+            gdf["label"] = gdf.apply(
+                lambda x: x["module"] if x["significant"] else noise_label,
+                axis=1
+            )
 
-        self.gdf = gdf.assign(sort_key=sort_key).sort_values('sort_key').drop('sort_key', axis=1)
-        return {**module_color_mapping, noise_label: noise_color}
+            gdf["sort_key"] = gdf["label"].apply(
+                lambda x: float("inf") if x == noise_label else int(x)
+            )
+        else:
+            gdf["label"] = gdf["module"]
+            gdf["sort_key"] = gdf["label"].astype(int)
+        self.gdf = gdf.sort_values("sort_key").drop("sort_key", axis=1)
+        return module_color_mapping
 
     @classmethod
     def from_file(cls, path: Path) -> typing.Self:
-        """Make GeoDataFrame from DataFrame."""
+        """Make GeoDataFrame from file."""
         df = pd.read_csv(path)
+        return cls.from_dataframe(df)
+
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame) -> typing.Self:
+        """Make GeoDataFrame from DataFrame"""
         gdf = gpd.GeoDataFrame(df, geometry=cls._geo_from_cells(df["node"].values))
         return cls(gdf)
 
@@ -126,7 +139,7 @@ class GeoPlot:
         ]
 
     @staticmethod
-    def reindex_modules(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    def _reindex_modules(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """Re-index module IDs ascending from South to North."""
         # Find the southernmost point for each module
         south_points = gdf.groupby("module")["geometry"].apply(

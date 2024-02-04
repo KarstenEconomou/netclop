@@ -4,7 +4,7 @@ import functools
 import click
 import numpy as np
 
-from .config_loader import load_config
+from .config_loader import load_config, update_config
 from .networkops import NetworkOps
 from .plot import GeoPlot
 
@@ -15,8 +15,8 @@ DEF_CFG = load_config()
 @click.option(
     '--config', 
     "config_path",
-    type=click.Path(exists=True), 
-    help="Path to custom configuration file."
+    type=click.Path(exists=True),
+    help="Path to custom configuration file.",
 )
 @click.pass_context
 def netclop(ctx, config_path):
@@ -40,7 +40,7 @@ def path_options(f):
         "-o",
         "output_path", 
         type=click.Path(),
-        required=True,
+        required=False,
         help="Output file.",
     )
     @functools.wraps(f)
@@ -62,38 +62,79 @@ def path_options(f):
 @click.pass_context
 def construct_net(ctx, input_path, output_path, res):
     """Constructs a network from LPT positions."""
+    updated_cfg = {"binning": {"res": res}}
+    update_config(ctx.obj["cfg"], updated_cfg)
+
     netops = NetworkOps(ctx.obj["cfg"])
     net = netops.from_positions(input_path)
     netops.write_edgelist(net, output_path)
 
 
-@netclop.command(name="stream")
+@netclop.command(name="partition")
 @path_options
+@click.option(
+    "--significance-cluster", 
+    "-sc",
+    "sig_clu",
+    is_flag=True,
+    help="Demarcate significant community assignments from statistical noise.",
+)
+@click.option(
+    "--res",
+    type=int,
+    default=DEF_CFG["binning"]["res"],
+    show_default=True,
+    help="H3 grid resolution (0-15) for domain discretization.",
+)
+@click.option(
+    "--markov-time",
+    "-mt",
+    type=float,
+    default=DEF_CFG["infomap"]["markov_time"],
+    show_default=True,
+    help="Markov time to tune spatial scale of detected structure.",
+)
+@click.option(
+    "--variable-markov-time/--static-markov-time",
+    is_flag=True,
+    show_default=True,
+    default=DEF_CFG["infomap"]["variable_markov_time"],
+    help="Permits the dynamic adjustment of Markov time with varying density.",
+)
 @click.pass_context
-def stream(ctx, input_path, output_path):
+def partition(ctx, input_path, output_path, sig_clu, res, markov_time, variable_markov_time):
     """Runs significance clustering directly from LPT positions."""
+    updated_cfg = {
+        "binning": {"res": res},
+        "infomap": {
+            "markov_time": markov_time,
+            "variable_markov_time": variable_markov_time,
+            },
+        }
+    update_config(ctx.obj["cfg"], updated_cfg)
+
     netops = NetworkOps(ctx.obj["cfg"])
 
     net = netops.from_positions(input_path)
     netops.partition(net)
 
-    bootstrap_nets = netops.make_bootstraps(net)
-    for bootstrap in bootstrap_nets:
-        netops.partition(bootstrap, node_info=False)
+    if sig_clu:
+        bootstrap_nets = netops.make_bootstraps(net)
+        for bootstrap in bootstrap_nets:
+            netops.partition(bootstrap, node_info=False)
 
-    partition = netops.group_nodes_by_module(net)
-    bootstrap_partitions = [netops.group_nodes_by_module(bs_net) for bs_net in bootstrap_nets]
+        part = netops.group_nodes_by_module(net)
+        bootstrap_parts = [netops.group_nodes_by_module(bs_net) for bs_net in bootstrap_nets]
 
-    counts = [len(bs_part) for bs_part in bootstrap_partitions]
-    print(f"Partitioned into {np.mean(counts):.1f} +/- {np.std(counts):.1f} modules")
+        counts = [len(bs_part) for bs_part in bootstrap_parts]
+        print(f"Partitioned into {np.mean(counts):.1f} +/- {np.std(counts):.1f} modules")
 
-    cores = netops.significance_cluster(partition, bootstrap_partitions)
+        cores = netops.significance_cluster(part, bootstrap_parts)
+        netops.compute_node_measures(net, cores)
 
-    netops.compute_node_measures(net, cores)
-    netops.write_nodelist(net, output_path)
-
-    gplt = GeoPlot.from_file(output_path)
-    gplt.plot()
+    df = netops.to_dataframe(net, output_path)
+    gplt = GeoPlot.from_dataframe(df)
+    gplt.plot(delineate_noise=sig_clu)
 
 
 @netclop.command(name="plot")
@@ -102,10 +143,16 @@ def stream(ctx, input_path, output_path):
     type=click.Path(exists=True),
     required=True,
     )
-def plot(input_path):
+@click.option(
+    "--delineate-noise",
+    "-dn",
+    is_flag=True,
+    help="Demarcate significant community assignments from statistical noise.",
+)
+def plot(input_path, delineate_noise):
     """Plots nodes."""
     gplt = GeoPlot.from_file(input_path)
-    gplt.plot()
+    gplt.plot(delineate_noise=delineate_noise)
 
 if __name__ == '__main__':
     netclop(obj={})

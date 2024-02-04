@@ -20,23 +20,14 @@ class NetworkOps:
     """Network operations."""
     _config: dict[str, any] = dataclasses.field(default_factory=lambda: load_config())
 
-    def write_nodelist(self, net: nx.DiGraph, path: Path) -> None:
-        """Writes the network nodelist with attributes to file."""
-        all_attributes = set()
-        for _, data in net.nodes(data=True):
-            all_attributes.update(data.keys())
-        attributes_sorted = sorted(list(all_attributes))
-        
-        with open(path, 'w', newline='') as file:
-            writer = csv.writer(file)
-            
-            writer.writerow(['node'] + attributes_sorted)
-            
-            # Write each node and its attributes
-            for node, attrs in net.nodes(data=True):
-                # Row starts with the node ID, followed by the attributes in sorted order
-                row = [node] + [attrs.get(attr, None) for attr in attributes_sorted]
-                writer.writerow(row)
+    def to_dataframe(self, net: nx.DiGraph, out_path: Path = None) -> pd.DataFrame:
+        """Writes the network nodelist with attributes."""
+        df = pd.DataFrame.from_dict(dict(net.nodes(data=True)), orient='index')
+        df.reset_index(inplace=True)
+        df.rename(columns={"index": "node"}, inplace=True)
+        if out_path is not None:
+            df.to_csv(out_path, index=True)
+        return df
 
     def write_edgelist(self, net: nx.DiGraph, path: Path) -> None:
         """Writes the network edgelist to file."""

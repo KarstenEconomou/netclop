@@ -1,5 +1,5 @@
 defaults: &defaults
-  seed: 12  # PRNG seed
+  seed: 42  # PRNG seed
 
 binning:
   res: 5  # H3 bin resolution (0-15)
