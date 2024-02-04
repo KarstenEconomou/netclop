@@ -41,7 +41,7 @@ netclop partition POSITIONS_PATH [OPTIONS]
 * `POSITIONS_PATH` Path to the positions file.
 
 ##### Options
-* `--output`, `o` Path to the output file where the node list will be written.
+* `--output`, `-o` Path to the output file where the node list will be written.
 * `--significance-cluster`, `-sc` Perform significance clustering to delineate noise
 * `--res` Specifies the H3 grid resolution (range 0-15) used for domain discretization.
 * `--markov-time`, `-mt` Tuning parameter of the spatial scale of detected structure."
