@@ -166,7 +166,7 @@ class NetworkOps:
             nx.set_edge_attributes(bootstrap, edge_attrs)
             bootstraps.append(bootstrap)
 
-        print(f"Poisson-resampled {num_bootstraps} bootstrap networks.")
+        print(f"Poisson-resampled {num_bootstraps} bootstrap networks")
         return bootstraps
 
     def significance_cluster(

@@ -101,14 +101,36 @@ def construct_net(ctx, input_path, output_path, res):
     default=DEF_CFG["infomap"]["variable_markov_time"],
     help="Permits the dynamic adjustment of Markov time with varying density.",
 )
+@click.option(
+    "--cooling-rate",
+    "-cr",
+    "cool_rate",
+    show_default=True,
+    default=DEF_CFG["sig_clu"]["cool_rate"],
+    help="Cooling rate in simulated annealing.",
+)
 @click.pass_context
-def partition(ctx, input_path, output_path, sig_clu, res, markov_time, variable_markov_time):
+def partition(
+    ctx,
+    input_path,
+    output_path,
+    sig_clu,
+    res,
+    markov_time,
+    variable_markov_time,
+    cool_rate,
+):
     """Runs significance clustering directly from LPT positions."""
     updated_cfg = {
-        "binning": {"res": res},
+        "binning": {
+            "res": res
+            },
         "infomap": {
             "markov_time": markov_time,
             "variable_markov_time": variable_markov_time,
+            },
+        "sig_clu": {
+            "cool_rate": cool_rate,
             },
         }
     update_config(ctx.obj["cfg"], updated_cfg)

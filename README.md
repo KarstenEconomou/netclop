@@ -46,6 +46,7 @@ netclop partition POSITIONS_PATH [OPTIONS]
 * `--res` Specifies the H3 grid resolution (range 0-15) used for domain discretization.
 * `--markov-time`, `-mt` Tuning parameter of the spatial scale of detected structure."
 * `--variable-markov-time`/`--static-markov-time` Allows for dynamic adjustment of Markov time with varying network density.
+* `--cooling-rate`, `-cr` Cooling rate of simulated annealing
 
 #### Plot
 Plots a node list.

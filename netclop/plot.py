@@ -7,7 +7,6 @@ import geopandas as gpd
 import h3.api.numpy_int as h3
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 import shapely
 
 from .constants import Path
@@ -19,103 +18,118 @@ class GeoPlot:
     fig: go.Figure = dataclasses.field(init=False)
 
     def plot(self, delineate_noise: bool = True) -> None:
-        """Plot modular structure."""
+        """Plots modular structure."""
         gdf = self.gdf
+        self._color_modules(delineate_noise)
+        gdf["node"] = gdf["node"].apply(hex)
 
-        modular_color_map = self._color_modules(delineate_noise)
-        self.fig = px.choropleth(
-            gdf,
-            geojson=gdf.geometry,
-            locations=gdf.index,
-            color="label",
-            fitbounds="locations",
-            projection="miller",
-            custom_data=["node", "module"],
-            color_discrete_map=modular_color_map,
-        )
-        self._set_traces()
-        self._set_geos()
+        self.fig = go.Figure()
+        geojson = json.loads(gdf.to_json())
+
+        modules = gdf['module'].unique()
+        for module in sorted(modules):
+            for significance in [True, False] if delineate_noise else [True]:
+                module_gdf = gdf[gdf["module"] == module]
+                if delineate_noise:
+                    module_gdf = module_gdf[module_gdf['significant'] == significance]
+
+                color = module_gdf["color"].unique().item()
+                # Add trace for significant or insignificant nodes
+                self.fig.add_trace(go.Choropleth(
+                    geojson=geojson,
+                    locations=module_gdf.index,
+                    z=module_gdf["module"],
+                    name=module,
+                    legendgroup=module,
+                    showlegend=significance,
+                    colorscale=[(0, color), (1, color)],
+                    marker={"line": {"width": 0.5, "color": "black"}},
+                    showscale=False,
+                    customdata=module_gdf[["node"]],
+                    hovertemplate="<b>%{customdata[0]}</b><br>"
+                    + "<extra></extra>"
+                ))
+
         self._set_layout()
         self.fig.show()
 
-    def _set_traces(self) -> None:
-        self.fig.update_traces(
-            marker={"opacity": 1.},
-            hovertemplate=
-            "<b>Index</b><br>"
-            + "Cell %{customdata[0]}<br>"
-            + "Module %{customdata[1]}<br>"
-            + "<extra></extra>",
-        )
-
     def _set_layout(self) -> None:
+        """Sets basic figure layout with geography."""
         self.fig.update_layout(
-            margin={"r": 0,"t": 0,"l": 0,"b": 0},
+            geo={
+                "fitbounds": "locations",
+                "projection_type": "natural earth",
+                "resolution": 50,
+                "showcoastlines": True,
+                "coastlinecolor": "black",
+                "coastlinewidth": 0.5,
+                "showland": True,
+                "landcolor": "#DCDCDC",
+                "showlakes": False,
+                "showcountries": True,
+            },
+            margin={"r": 2, "t": 2, "l": 2, "b": 2},
             hoverlabel={
-                "bgcolor": "rgba(255, 255, 255, 1)",
-                "font_size": 14,
-                "font_family": "Arial"
+                "bgcolor": "rgba(255, 255, 255, 0.8)",
+                "font_size": 12,
+                "font_family": "Arial",
             },
             legend={
+                "font_size": 12,
+                "orientation": "h",
                 "yanchor": "top",
-                "y": 0.95,
-                "xanchor": "left",
-                "x": 0.01,
+                "y": 0.05,
+                "xanchor": "right",
+                "x": 0.98,
+                "title_text": "Module",
+                "itemsizing": "constant",
+                "bgcolor": "rgba(255, 255, 255, 0)",
             },
-            legend_title="Module",
         )
 
-    def _set_geos(self) -> None:
-        self.fig.update_geos(
-            resolution=50,
-            showcoastlines=True,
-            coastlinecolor="black",
-            showland=True,
-            landcolor="#deded1",
-            showocean=True,
-            oceancolor="white",
-        )
-
-    def _color_modules(self, delineate_noise: bool = True) -> dict[str, str]:
-        """Assigns color to modules and noise."""
+    def _color_modules(self, delineate_noise: bool = True, trivial_module_size: int = 1) -> None:
+        """Assigns colors to modules based on significance, and marks trivial modules."""
         gdf = self.gdf
         gdf["module"] = gdf["module"].astype(str)
 
-        module_color_mapping = {
-            "1": "#636EFA",
-            "2": "#EF553B",
-            "3": "#00CC96",
-            "4": "#AB63FA",
-            "5": "#FFA15A",
-            "6": "#19D3F3",
-            "7": "#FF6692",
-            "8": "#B6E880",
-            "9": "#FF97FF",
-            "10": "#FECB52",
+        modules_colors = {
+            "1": {"significant": "#636EFA", "insignificant": "#A9B8FA"},
+            "2": {"significant": "#EF553B", "insignificant": "#FAB9B5"},
+            "3": {"significant": "#00CC96", "insignificant": "#80E2C1"},
+            "4": {"significant": "#FFA15A", "insignificant": "#FFD1A9"},
+            "5": {"significant": "#AB63FA", "insignificant": "#D4B5FA"},
+            "6": {"significant": "#19D3F3", "insignificant": "#8CEAFF"},
+            "7": {"significant": "#FF6692", "insignificant": "#FFB5C5"},
+            "8": {"significant": "#B6E880", "insignificant": "#DAFAB6"},
+            "9": {"significant": "#FF97FF", "insignificant": "#FFD1FF"},
+            "10": {"significant": "#FECB52", "insignificant": "#FFE699"},
         }
+
+        # Overwrite trivial module colors
+        trivial_color = {"significant": "#A9A9A9", "insignificant": "#A9A9A9"}
+        module_counts = gdf["module"].value_counts()
+        trivial_modules = module_counts[module_counts <= trivial_module_size].index.tolist()
+        for module in trivial_modules:
+            modules_colors[module] = trivial_color
 
         if delineate_noise:
             if "significant" not in gdf.columns:
                 raise ValueError(
-                    "The node list must contain a 'significant' column to delineate noise."
+                    "Node list must contain 'significant' column for significance coloring."
                 )
-            noise_label = "Noise"
-            noise_color = "#e6e6e6"
-            module_color_mapping[noise_label] = noise_color
 
-            gdf["label"] = gdf.apply(
-                lambda x: x["module"] if x["significant"] else noise_label,
+            gdf["color"] = gdf.apply(
+                lambda row: modules_colors[row["module"]]["significant"] if row["significant"]
+                else modules_colors[row["module"]]["insignificant"],
                 axis=1
             )
-
-            gdf["sort_key"] = gdf["label"].apply(
-                lambda x: float("inf") if x == noise_label else int(x)
-            )
         else:
-            gdf["label"] = gdf["module"]
-            gdf["sort_key"] = gdf["label"].astype(int)
-        self.gdf = gdf.sort_values("sort_key").drop("sort_key", axis=1)
-        return module_color_mapping
+            # Default to significant colors
+            gdf["color"] = gdf["module"].apply(
+                lambda x: modules_colors[x]["significant"]
+            )
+
+        self.gdf = gdf.sort_values(by=["module", "significant"], ascending=[True, False])
 
     @classmethod
     def from_file(cls, path: Path) -> typing.Self:

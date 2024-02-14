@@ -19,5 +19,5 @@ sig_clu:
   sig: 0.05  # Significance level for clustering
   pen_weight: 1.0
   temp_init: 1.0
-  cool_rate: 0.1
+  cool_rate: 0.8
   iter_max: 1000  # Maximum number of iterations
