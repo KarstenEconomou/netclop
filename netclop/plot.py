@@ -129,7 +129,7 @@ class GeoPlot:
                 lambda x: modules_colors[x]["significant"]
             )
 
-        self.gdf = gdf.sort_values(by=["module", "significant"], ascending=[True, False])
+        self.gdf = gdf
 
     @classmethod
     def from_file(cls, path: Path) -> typing.Self:
