@@ -67,7 +67,9 @@ def construct_net(ctx, input_path, output_path, res):
 
     netops = NetworkOps(ctx.obj["cfg"])
     net = netops.from_positions(input_path)
-    netops.write_edgelist(net, output_path)
+
+    if output_path is not None:
+        netops.write_edgelist(net, output_path)
 
 
 @netclop.command(name="partition")
@@ -109,6 +111,14 @@ def construct_net(ctx, input_path, output_path, res):
     default=DEF_CFG["sig_clu"]["cool_rate"],
     help="Cooling rate in simulated annealing.",
 )
+@click.option(
+    "--plot/--no-plot",
+    "do_plot",
+    is_flag=True,
+    show_default=True,
+    default=True,
+    help="Show geographic plot of community structure.",
+)
 @click.pass_context
 def partition(
     ctx,
@@ -119,6 +129,7 @@ def partition(
     markov_time,
     variable_markov_time,
     cool_rate,
+    do_plot,
 ):
     """Runs significance clustering directly from LPT positions."""
     updated_cfg = {
@@ -155,26 +166,30 @@ def partition(
         netops.compute_node_measures(net, cores)
 
     df = netops.to_dataframe(net, output_path)
-    gplt = GeoPlot.from_dataframe(df)
-    gplt.plot(delineate_noise=sig_clu)
+
+    if do_plot:
+        gplt = GeoPlot.from_dataframe(df)
+        gplt.plot(delineate_noise=sig_clu)
+        gplt.show()
 
 
 @netclop.command(name="plot")
-@click.argument(
-    "input-path", 
-    type=click.Path(exists=True),
-    required=True,
-    )
+@path_options
 @click.option(
     "--delineate-noise",
     "-dn",
     is_flag=True,
     help="Demarcate significant community assignments from statistical noise.",
 )
-def plot(input_path, delineate_noise):
+def plot(input_path, output_path, delineate_noise):
     """Plots nodes."""
     gplt = GeoPlot.from_file(input_path)
     gplt.plot(delineate_noise=delineate_noise)
+
+    if output_path is not None:
+        gplt.save(output_path)
+    else:
+        gplt.show()
 
 if __name__ == '__main__':
     netclop(obj={})

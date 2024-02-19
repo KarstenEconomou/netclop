@@ -17,11 +17,22 @@ class GeoPlot:
     gdf: gpd.GeoDataFrame
     fig: go.Figure = dataclasses.field(init=False)
 
+    def save(self, path) -> None:
+        """Saves figure to static image."""
+        dpi = 300
+        width = 5  # inches
+        height = 3  # inches
+        self.fig.write_image(path, height=height * dpi, width=width * dpi, scale=1)
+
+    def show(self) -> None:
+        """Shows plot."""
+        self.fig.show()
+
     def plot(self, delineate_noise: bool = True) -> None:
         """Plots modular structure."""
         gdf = self.gdf
         self._color_modules(delineate_noise)
-        gdf["node"] = gdf["node"].apply(hex)
+        gdf["node"] = gdf["node"].astype(int).apply(hex)
 
         self.fig = go.Figure()
         geojson = json.loads(gdf.to_json())
@@ -51,7 +62,6 @@ class GeoPlot:
                 ))
 
         self._set_layout()
-        self.fig.show()
 
     def _set_layout(self) -> None:
         """Sets basic figure layout with geography."""
