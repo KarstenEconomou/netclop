@@ -30,6 +30,15 @@ netclop [GLOBAL OPTIONS] COMMAND [ARGS] [OPTIONS]
 
 ### Commands
 
+#### Construct
+Constructs a network from positions.
+
+```
+netclop construct POSITIONS_PATH [OPTIONS]
+```
+* `--output`, `-o` Path to the output file where the edge list will be written.
+* `--res` Specifies the H3 grid resolution (range 0-15) used for domain discretization.
+
 #### Partition
 Constructs and partitions a network from positions, optionally demarcating significant assignments from statistical noise.
 
@@ -44,9 +53,10 @@ netclop partition POSITIONS_PATH [OPTIONS]
 * `--output`, `-o` Path to the output file where the node list will be written.
 * `--significance-cluster`, `-sc` Perform significance clustering to delineate noise
 * `--res` Specifies the H3 grid resolution (range 0-15) used for domain discretization.
-* `--markov-time`, `-mt` Tuning parameter of the spatial scale of detected structure."
+* `--markov-time`, `-mt` Tuning parameter of the spatial scale of detected structure.
 * `--variable-markov-time`/`--static-markov-time` Allows for dynamic adjustment of Markov time with varying network density.
 * `--cooling-rate`, `-cr` Cooling rate of simulated annealing.
+* `--plot`/`--no-plot` Geographically plot community structure.
 
 #### Plot
 Plots a node list.
@@ -59,4 +69,5 @@ netclop plot NODE_PATH [OPTIONS]
 * `NODE_PATH` Path to a node list. Node names must be integer H3 indices.
 
 ##### Options
+* `--output`, `-o` Path to the output file where the figure will be saved.
 * `--delineate-noise`, `-dn` Delineates noise in plot if "significant" column flag in node list file
