@@ -37,12 +37,12 @@ class GeoPlot:
         self.fig = go.Figure()
         geojson = json.loads(gdf.to_json())
 
-        modules = gdf['module'].unique()
+        modules = gdf["module"].unique()
         for module in sorted(modules):
             for significance in [True, False] if delineate_noise else [True]:
                 module_gdf = gdf[gdf["module"] == module]
                 if delineate_noise:
-                    module_gdf = module_gdf[module_gdf['significant'] == significance]
+                    module_gdf = module_gdf[module_gdf["significant"] == significance]
 
                 color = module_gdf["color"].unique().item()
                 # Add trace for significant or insignificant nodes
@@ -97,7 +97,7 @@ class GeoPlot:
             },
         )
 
-    def _color_modules(self, delineate_noise: bool = True, trivial_module_size: int = 1) -> None:
+    def _color_modules(self, delineate_noise: bool = True) -> None:
         """Assigns colors to modules based on significance, and marks trivial modules."""
         gdf = self.gdf
         gdf["module"] = gdf["module"].astype(str)
@@ -114,13 +114,6 @@ class GeoPlot:
             "9": {"significant": "#FF97FF", "insignificant": "#FFD1FF"},
             "10": {"significant": "#FECB52", "insignificant": "#FFE699"},
         }
-
-        # Overwrite trivial module colors
-        trivial_color = {"significant": "#A9A9A9", "insignificant": "#A9A9A9"}
-        module_counts = gdf["module"].value_counts()
-        trivial_modules = module_counts[module_counts <= trivial_module_size].index.tolist()
-        for module in trivial_modules:
-            modules_colors[module] = trivial_color
 
         if delineate_noise:
             if "significant" not in gdf.columns:
