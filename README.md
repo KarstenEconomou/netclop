@@ -36,6 +36,10 @@ Constructs a network from positions.
 ```
 netclop construct POSITIONS_PATH [OPTIONS]
 ```
+##### Arguments
+* `POSITIONS_PATH` Path to the positions file.
+
+##### Options
 * `--output`, `-o` Path to the output file where the edge list will be written.
 * `--res` Specifies the H3 grid resolution (range 0-15) used for domain discretization.
 
