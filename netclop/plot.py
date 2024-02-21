@@ -39,27 +39,32 @@ class GeoPlot:
 
         modules = gdf["module"].unique()
         for module in sorted(modules):
+            # Add trace for each module significant and insignificant components
             for significance in [True, False] if delineate_noise else [True]:
                 module_gdf = gdf[gdf["module"] == module]
                 if delineate_noise:
-                    module_gdf = module_gdf[module_gdf["significant"] == significance]
+                    trace_gdf = module_gdf[module_gdf["significant"] == significance]
+                else:
+                    trace_gdf = module_gdf
 
-                color = module_gdf["color"].unique().item()
-                # Add trace for significant or insignificant nodes
-                self.fig.add_trace(go.Choropleth(
-                    geojson=geojson,
-                    locations=module_gdf.index,
-                    z=module_gdf["module"],
-                    name=module,
-                    legendgroup=module,
-                    showlegend=significance,
-                    colorscale=[(0, color), (1, color)],
-                    marker={"line": {"width": 0.5, "color": "black"}},
-                    showscale=False,
-                    customdata=module_gdf[["node"]],
-                    hovertemplate="<b>%{customdata[0]}</b><br>"
-                    + "<extra></extra>"
-                ))
+                if not trace_gdf.empty:
+                    color = trace_gdf["color"].unique().item()
+
+                    # Add trace for significant or insignificant nodes
+                    self.fig.add_trace(go.Choropleth(
+                        geojson=geojson,
+                        locations=trace_gdf.index,
+                        z=trace_gdf["module"],
+                        name=module,
+                        legendgroup=module,
+                        showlegend=significance,
+                        colorscale=[(0, color), (1, color)],
+                        marker={"line": {"width": 0.5, "color": "black"}},
+                        showscale=False,
+                        customdata=trace_gdf[["node"]],
+                        hovertemplate="<b>%{customdata[0]}</b><br>"
+                        + "<extra></extra>"
+                    ))
 
         self._set_layout()
 
