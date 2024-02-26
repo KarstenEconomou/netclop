@@ -83,15 +83,15 @@ def construct_net(ctx, input_path, output_path, res):
 )
 @click.option(
     "--res",
-    type=int,
+    type=click.IntRange(min=0, max=15),
     default=DEF_CFG["binning"]["res"],
     show_default=True,
-    help="H3 grid resolution (0-15) for domain discretization.",
+    help="H3 grid resolution for domain discretization.",
 )
 @click.option(
     "--markov-time",
     "-mt",
-    type=float,
+    type=click.FloatRange(min=0, max=None, min_open=True),
     default=DEF_CFG["infomap"]["markov_time"],
     show_default=True,
     help="Markov time to tune spatial scale of detected structure.",
@@ -104,9 +104,25 @@ def construct_net(ctx, input_path, output_path, res):
     help="Permits the dynamic adjustment of Markov time with varying density.",
 )
 @click.option(
+    "--num-trials",
+    "-n",
+    show_default=True,
+    default=DEF_CFG["infomap"]["num_trials"],
+    help="Number of outer-loop community detection trials to run.",
+)
+@click.option(
+    "--seed",
+    "-s",
+    show_default=True,
+    type=click.IntRange(min=1, max=None),
+    default=DEF_CFG["infomap"]["seed"],
+    help="PRNG seed for community detection.",
+)
+@click.option(
     "--cooling-rate",
     "-cr",
     "cool_rate",
+    type=float,
     show_default=True,
     default=DEF_CFG["sig_clu"]["cool_rate"],
     help="Cooling rate in simulated annealing.",
@@ -128,6 +144,8 @@ def partition(
     res,
     markov_time,
     variable_markov_time,
+    num_trials,
+    seed,
     cool_rate,
     do_plot,
 ):
@@ -139,12 +157,15 @@ def partition(
         "infomap": {
             "markov_time": markov_time,
             "variable_markov_time": variable_markov_time,
+            "num_trials": num_trials,
+            "seed": seed,
             },
         "sig_clu": {
             "cool_rate": cool_rate,
             },
         }
     update_config(ctx.obj["cfg"], updated_cfg)
+    print(ctx.obj["cfg"])
 
     netops = NetworkOps(ctx.obj["cfg"])
 
