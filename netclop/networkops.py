@@ -1,5 +1,4 @@
 """Defines the NetworkOps class."""
-import csv
 import dataclasses
 import typing
 

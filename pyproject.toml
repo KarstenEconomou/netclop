@@ -27,4 +27,4 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-netclop = "netclop.cli:netclop"
+netclop = "netclop.main:netclop"
