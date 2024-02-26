@@ -14,7 +14,7 @@ from .config_loader import load_config
 )
 @click.pass_context
 def netclop(ctx, config_path):
-    """Netclop CLI."""
+    """Network clustering operations."""
     if ctx.obj is None:
         ctx.obj = {}
     cfg = load_config()
