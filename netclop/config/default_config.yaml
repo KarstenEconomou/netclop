@@ -6,7 +6,7 @@ binning:
 
 infomap:
   <<: *defaults
-  num_trials: 10
+  num_trials: 20
   markov_time: 2.0
   variable_markov_time: true
 
