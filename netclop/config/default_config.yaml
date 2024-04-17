@@ -6,7 +6,7 @@ binning:
 
 infomap:
   <<: *defaults
-  num_trials: 20
+  num_trials: 5
   markov_time: 2.0
   variable_markov_time: true
 
@@ -21,3 +21,4 @@ sig_clu:
   temp_init: 1.0
   cool_rate: 0.8
   iter_max: 1000  # Maximum number of iterations
+  thresh: 0.03 # Minimum size of robust core relative to module (recursive only)

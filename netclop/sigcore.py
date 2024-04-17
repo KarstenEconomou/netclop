@@ -1,5 +1,6 @@
 """Defines classes for significance clustering."""
 import dataclasses
+import enum
 from collections import namedtuple
 
 import numpy as np
@@ -8,6 +9,14 @@ from .config_loader import load_config
 from .constants import Node, Partition
 
 Score = namedtuple("Score", ["size", "pen"])
+
+
+class SigCluScheme(enum.Enum):
+    """Significance clustering scheme."""
+    NONE = enum.auto()
+    STANDARD = enum.auto()
+    RECURSIVE = enum.auto()
+
 
 @dataclasses.dataclass
 class SigClu:
@@ -25,10 +34,9 @@ class SigClu:
     def run(self) -> list[set[Node]]:
         """Finds the significant cores of all modules."""
         cores = []
-        for i, module in enumerate(self.partition, 1):
+        for module in self.partition:
             core = self.find_sig_core(module)
             cores.append(core)
-            print(f"Sig core of module {i} found: {len(core)}/{len(module)} nodes")
         return cores
 
     def find_sig_core(self, module: set[Node]) -> set[Node]:

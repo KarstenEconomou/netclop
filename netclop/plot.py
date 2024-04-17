@@ -10,12 +10,14 @@ import plotly.graph_objects as go
 import shapely
 
 from .constants import Path
+from .sigcore import SigCluScheme
 
 @dataclasses.dataclass
 class GeoPlot:
     """Geospatial plotting."""
     gdf: gpd.GeoDataFrame
     fig: go.Figure = dataclasses.field(init=False)
+    geojson: dict = dataclasses.field(init=False)
 
     def save(self, path) -> None:
         """Saves figure to static image."""
@@ -28,47 +30,67 @@ class GeoPlot:
         """Shows plot."""
         self.fig.show()
 
-    def plot(self, delineate_noise: bool = True) -> None:
+    def plot(self, sig_clu: SigCluScheme=SigCluScheme.NONE) -> None:
         """Plots modular structure."""
         gdf = self.gdf
-        self._color_modules(delineate_noise)
-        gdf["node"] = gdf["node"].astype(int).apply(hex)
+
+        self._format_gdf()
+        self._color_modules(sig_clu)
 
         self.fig = go.Figure()
-        geojson = json.loads(gdf.to_json())
+        self.geojson = json.loads(gdf.to_json())
 
-        modules = gdf["module"].unique()
-        for module in sorted(modules):
-            # Add trace for each module significant and insignificant components
-            for significance in [True, False] if delineate_noise else [True]:
-                module_gdf = gdf[gdf["module"] == module]
-                if delineate_noise:
-                    trace_gdf = module_gdf[module_gdf["significant"] == significance]
-                else:
-                    trace_gdf = module_gdf
+        match sig_clu:
+            case SigCluScheme.NONE:
+                for idx, trace_gdf in self._get_traces(gdf, "module"):
+                    self._add_trace(trace_gdf, idx)
+                legend_title = "Module"
+            case SigCluScheme.STANDARD:
+                for module_idx, module_gdf in self._get_traces(gdf, "module"):
+                    for core_idx, core_gdf in self._get_traces(module_gdf, "core"):
+                        self._add_trace(core_gdf, module_idx, show_legend=bool(core_idx))
+                legend_title = "Module"
+            case SigCluScheme.RECURSIVE:
+                for idx, trace_gdf in self._get_traces(gdf, "core"):
+                    self._add_trace(trace_gdf, str(idx))
+                legend_title = "Core"
 
-                if not trace_gdf.empty:
-                    color = trace_gdf["color"].unique().item()
+        self._set_layout(legend_title)
 
-                    # Add trace for significant or insignificant nodes
-                    self.fig.add_trace(go.Choropleth(
-                        geojson=geojson,
-                        locations=trace_gdf.index,
-                        z=trace_gdf["module"],
-                        name=module,
-                        legendgroup=module,
-                        showlegend=significance,
-                        colorscale=[(0, color), (1, color)],
-                        marker={"line": {"width": 0.5, "color": "black"}},
-                        showscale=False,
-                        customdata=trace_gdf[["node"]],
-                        hovertemplate="<b>%{customdata[0]}</b><br>"
-                        + "<extra></extra>"
-                    ))
+    def _format_gdf(self) -> None:
+        """Formats gdf column types."""
+        gdf = self.gdf
+        gdf["module"] = gdf["module"].astype(str)
+        gdf["node"] = gdf["node"].astype(int).apply(hex)
 
-        self._set_layout()
+    def _get_traces(self, gdf: gpd.GeoDataFrame, col: str) -> list[tuple[str, gpd.GeoDataFrame]]:
+        traces = []
+        trace_idx = self._get_sorted_unique_col(gdf, col)
+        for idx in trace_idx:
+            trace_gdf = self._filter_to_col_entry(gdf, col, idx)
+            traces.append((idx, trace_gdf))
+        return traces
 
-    def _set_layout(self) -> None:
+    def _add_trace(self, trace_gdf: gpd.GeoDataFrame, label: str, show_legend: bool=True) -> None:
+        """Adds trace to plot."""
+        if not trace_gdf.empty:
+            color = trace_gdf["color"].unique().item()
+            self.fig.add_trace(go.Choropleth(
+                geojson=self.geojson,
+                locations=trace_gdf.index,
+                z=trace_gdf["module"],
+                name=label,
+                legendgroup=label,
+                showlegend=show_legend,
+                colorscale=[(0, color), (1, color)],
+                marker={"line": {"width": 0.1, "color": "white"}},
+                showscale=False,
+                customdata=trace_gdf[["node"]],
+                hovertemplate="<b>%{customdata[0]}</b><br>"
+                + "<extra></extra>"
+            ))
+
+    def _set_layout(self, legend_title: str) -> None:
         """Sets basic figure layout with geography."""
         self.fig.update_layout(
             geo={
@@ -96,46 +118,48 @@ class GeoPlot:
                 "y": 0.05,
                 "xanchor": "right",
                 "x": 0.98,
-                "title_text": "Module",
+                "title_text": legend_title,
                 "itemsizing": "constant",
                 "bgcolor": "rgba(255, 255, 255, 0)",
             },
         )
 
-    def _color_modules(self, delineate_noise: bool = True) -> None:
+    def _color_modules(self, sig_clu: SigCluScheme) -> None:
         """Assigns colors to modules based on significance, and marks trivial modules."""
         gdf = self.gdf
         gdf["module"] = gdf["module"].astype(str)
 
-        modules_colors = {
-            "1": {"significant": "#636EFA", "insignificant": "#A9B8FA"},
-            "2": {"significant": "#EF553B", "insignificant": "#FAB9B5"},
-            "3": {"significant": "#00CC96", "insignificant": "#80E2C1"},
-            "4": {"significant": "#FFA15A", "insignificant": "#FFD1A9"},
-            "5": {"significant": "#AB63FA", "insignificant": "#D4B5FA"},
-            "6": {"significant": "#19D3F3", "insignificant": "#8CEAFF"},
-            "7": {"significant": "#FF6692", "insignificant": "#FFB5C5"},
-            "8": {"significant": "#B6E880", "insignificant": "#DAFAB6"},
-            "9": {"significant": "#FF97FF", "insignificant": "#FFD1FF"},
-            "10": {"significant": "#FECB52", "insignificant": "#FFE699"},
+        noise_color = "#CCCCCC"
+        colors = {  # Core index zero reserved for recursive noise
+            "1": {"core": "#636EFA", "noise": "#A9B8FA"},
+            "2": {"core": "#EF553B", "noise": "#FAB9B5"},
+            "3": {"core": "#00CC96", "noise": "#80E2C1"},
+            "4": {"core": "#FFA15A", "noise": "#FFD1A9"},
+            "5": {"core": "#AB63FA", "noise": "#D4B5FA"},
+            "6": {"core": "#19D3F3", "noise": "#8CEAFF"},
+            "7": {"core": "#FF6692", "noise": "#FFB5C5"},
+            "8": {"core": "#B6E880", "noise": "#DAFAB6"},
+            "9": {"core": "#FF97FF", "noise": "#FFD1FF"},
+            "10": {"core": "#FECB52", "noise": "#FFE699"},
         }
 
-        if delineate_noise:
-            if "significant" not in gdf.columns:
-                raise ValueError(
-                    "Node list must contain 'significant' column for significance coloring."
+        match sig_clu:
+            case SigCluScheme.NONE:
+                gdf["color"] = gdf["module"].apply(
+                    lambda x: colors[x]["core"]
                 )
-
-            gdf["color"] = gdf.apply(
-                lambda row: modules_colors[row["module"]]["significant"] if row["significant"]
-                else modules_colors[row["module"]]["insignificant"],
-                axis=1
-            )
-        else:
-            # Default to significant colors
-            gdf["color"] = gdf["module"].apply(
-                lambda x: modules_colors[x]["significant"]
-            )
+            case SigCluScheme.STANDARD:
+                gdf["color"] = gdf.apply(
+                    lambda row: colors[row["module"]]["core"] if row["core"]
+                    else colors[row["module"]]["noise"],
+                    axis=1
+                )
+            case SigCluScheme.RECURSIVE:
+                gdf["color"] = gdf.apply(
+                    lambda row: colors[str(row["core"])]["core"] if row["core"]
+                    else noise_color,
+                    axis=1
+                )
 
         self.gdf = gdf
 
@@ -181,3 +205,13 @@ class GeoPlot:
         gdf = gdf.sort_values(by=["module"], ascending=[True]).reset_index(drop=True)
         gdf["module"] = gdf["module"].astype(str)
         return gdf
+
+    @staticmethod
+    def _get_sorted_unique_col(gdf: gpd.GeoDataFrame, col: str) -> list:
+        """Get all unique entries of a gdf column sorted."""
+        return sorted(gdf[col].unique())
+
+    @staticmethod
+    def _filter_to_col_entry(gdf: gpd.GeoDataFrame, col: str, entry) -> gpd.GeoDataFrame:
+        """Get subset of gdf with column equal to a certain entry."""
+        return gdf[gdf[col] == entry]

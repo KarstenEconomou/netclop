@@ -4,6 +4,7 @@ import functools
 import click
 
 from ..config_loader import load_config, update_config
+from ..sigcore import SigCluScheme
 
 DEF_CFG = load_config()
 
@@ -86,8 +87,10 @@ def sig_clu(f):
         "--significance-cluster", 
         "-sc",
         "sig_clu",
-        is_flag=True,
-        help="Demarcate significant community assignments from statistical noise.",
+        type=click.Choice([scheme.name for scheme in SigCluScheme], case_sensitive=False),
+        default="NONE",
+        show_default=True,
+        help="Scheme to demarcate significant community assignments from statistical noise.",
     )
     @click.option(
         "--cooling-rate",
@@ -106,12 +109,6 @@ def sig_clu(f):
 
 def plot(f):
     """Plotting options."""
-    @click.option(
-        "--delineate-noise",
-        "-dn",
-        is_flag=True,
-        help="Demarcate significant community assignments from statistical noise.",
-    )
     @functools.wraps(f)
     def wrapper_path_options(*args, **kwargs):
         return f(*args, **kwargs)

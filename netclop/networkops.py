@@ -8,9 +8,9 @@ import numpy as np
 import pandas as pd
 from infomap import Infomap
 
-from .config_loader import load_config
+from .config_loader import load_config, update_config
 from .constants import Node, Partition, Path
-from .sigcore import SigClu
+from .sigcore import SigClu, SigCluScheme
 
 CONFIG = load_config()
 
@@ -18,6 +18,10 @@ CONFIG = load_config()
 class NetworkOps:
     """Network operations."""
     _config: dict[str, any] = dataclasses.field(default_factory=lambda: load_config())
+
+    def update_config(self, cfg_update: dict) -> None:
+        """Updates operation configuration."""
+        update_config(self._config, cfg_update)
 
     def to_dataframe(self, net: nx.DiGraph, out_path: Path = None) -> pd.DataFrame:
         """Writes the network nodelist with attributes."""
@@ -68,8 +72,6 @@ class NetworkOps:
         ) -> list[int]:
             """Bins (lng, lat) coordinate pairs into an H3 cell."""
             return [h3.latlng_to_cell(lat, lng, res) for lat, lng in zip(lats, lngs)]
-
-        print(f"Binning {data.shape[0]} particle positions")
         srcs = bin_positions(data["initial_lng"], data["initial_lat"], resolution)
         tgts = bin_positions(data["final_lng"], data["final_lat"], resolution)
         edges = tuple(zip(srcs, tgts))
@@ -89,32 +91,123 @@ class NetworkOps:
         self.normalize_edge_weights(net)
 
         nx.relabel_nodes(net, dict((name, str(name)) for name in net.nodes), copy=False)
-        print(f"Constructed network of {len(net.nodes)} nodes and {len(net.edges)} edges")
         return net
 
-    def compute_node_measures(self, net: nx.DiGraph, cores: list[set[Node]]=None) -> None:
+    def get_module_list(self, net: nx.DiGraph) -> set:
+        """Gets set of module indices."""
+        return {net.nodes[node]["module"] for node in net.nodes}
+
+    def modular_strength(self, net: nx.DiGraph) -> dict:
+        """Calculates strength measures of each module."""
+        modules = self.get_module_list(net)
+        strength = {
+            module: {"ext": {"out": 0, "in": 0}, "int": 0} for module in modules
+        }
+
+        for src, tgt, wgt in net.edges.data("weight"):
+            # Out-edge of src, in-edge of tgt, with weight wgt
+            src_mod = net.nodes[src]["module"]
+            tgt_mod = net.nodes[tgt]["module"]
+            if src_mod != tgt_mod:
+                strength[src_mod]["ext"]["out"] += wgt
+                strength[tgt_mod]["ext"]["in"] += wgt
+            else:
+                strength[src_mod]["int"] += wgt
+
+        return strength
+
+    def coherence_fortress(self, strength: dict) -> tuple[dict[int, float], dict[int, float]]:
+        """Computes the coherence and fortress of each module."""
+        coherence = {}
+        fortress = {}
+        for mod in strength.keys():
+            out_str = strength[mod]["int"] + strength[mod]["ext"]["out"]
+            in_str = strength[mod]["int"] + strength[mod]["ext"]["in"]
+
+            coherence[mod] = strength[mod]["int"] / out_str if out_str != 0 else 0
+            fortress[mod] = strength[mod]["int"] / in_str if in_str != 0 else 0
+        return coherence, fortress
+
+    def cohesion_mixing(self, net: nx.DiGraph) -> tuple[float, float]:
+        """Calculates cohesion and mixing of a partition."""
+        strength = self.modular_strength(net)
+        modules = strength.keys()
+
+        net_str = sum(strength[mod]["int"] + strength[mod]["ext"]["out"] for mod in modules)
+        net_int_str = sum(strength[mod]["int"] for mod in modules)
+
+        cohesion = net_int_str / net_str
+
+        module_mixing = self.mixing(net)
+        mixing = sum(module_mixing[mod] * strength[mod]["int"] for mod in modules) / net_int_str
+
+        return cohesion, mixing
+
+    def mixing(self, net: nx.DiGraph) -> float:
+        """Calculates the mixing parameter of each module."""
+        mixing = {}
+        modules = self.group_nodes_by_module(net)
+        for mod in modules:
+            retain_wgts = []
+            for src in mod:
+                src_mod = net.nodes[src]["module"]
+                for tgt in net.successors(src):
+                    tgt_mod = net.nodes[tgt]["module"]
+                    if src_mod == tgt_mod:
+                        wgt = net.get_edge_data(src, tgt)["weight"]
+                        retain_wgts.append(wgt)
+
+            total_retain_wgt = sum(retain_wgts)
+            norm_wgts = [wgt / total_retain_wgt for wgt in retain_wgts]
+
+            mod_size = len(mod)
+            if mod_size > 1:
+                mixing[src_mod] = -sum(
+                    wgt * np.log2(wgt) for wgt in norm_wgts
+                ) / (mod_size * np.log2(mod_size))
+            else:
+                mixing[src_mod] = 0
+
+        return mixing
+
+    def compute_node_measures(
+        self,
+        net: nx.DiGraph,
+        cores: list[set[Node]]=None,
+    ) -> None:
         """Calculate node measures and save as attributes."""
-        # Significance
-        significant_nodes = set.union(*cores)
-        for node in net.nodes():
-            net.nodes[node]["significant"] = node in significant_nodes
+        match self._config["sig_clu"]["scheme"]:
+            case SigCluScheme.STANDARD:
+                significant_nodes = set.union(*cores)
+                for node in net.nodes():
+                    net.nodes[node]["core"] = int(node in significant_nodes)
+            case SigCluScheme.RECURSIVE:
+                sorted_cores = sorted(cores, key=len, reverse=True)
+                node_to_core = {}
+                for index, node_set in enumerate(sorted_cores, start=1):
+                    for node in node_set:
+                        node_to_core[node] = index
+                for node in net.nodes:
+                    net.nodes[node]["core"] = node_to_core.get(node, 0)
+            case _:
+                pass
 
-        # In- and out- degree and strength
-        in_degs = dict(net.in_degree())
-        out_degs = dict(net.out_degree())
+        # # In- and out-degree and strength
+        # in_degs = dict(net.in_degree())
+        # out_degs = dict(net.out_degree())
 
-        in_strs = dict(net.in_degree(weight='weight'))
-        out_strs = dict(net.out_degree(weight='weight'))
+        # in_strs = dict(net.in_degree(weight='weight'))
+        # out_strs = dict(net.out_degree(weight='weight'))
 
-        # Betweenness
-        betweenness_centrality = nx.betweenness_centrality(net)
+        # # Betweenness
+        # betweenness_centrality = nx.betweenness_centrality(net)
 
-        # Update network with metrics
-        nx.set_node_attributes(net, in_degs, "in_deg")
-        nx.set_node_attributes(net, out_degs, "out_deg")
-        nx.set_node_attributes(net, in_strs, "in_str")
-        nx.set_node_attributes(net, out_strs, "out_str")
-        nx.set_node_attributes(net, betweenness_centrality, "betweenness")
+        # # Update network with metrics
+        # nx.set_node_attributes(net, in_degs, "in_deg")
+        # nx.set_node_attributes(net, out_degs, "out_deg")
+        # nx.set_node_attributes(net, in_strs, "in_str")
+        # nx.set_node_attributes(net, out_strs, "out_str")
+        # nx.set_node_attributes(net, betweenness_centrality, "betweenness")
 
     def normalize_edge_weights(self, net: nx.DiGraph) -> None:
         """Normalizes out-edge weight distributions to sum to unity."""
@@ -137,9 +230,9 @@ class NetworkOps:
         _ = im.add_networkx_graph(net, weight="weight")
         im.run()
 
+        # Set node attributes
         if node_info:
             node_info = im.get_dataframe(["name", "module_id", "flow", "modular_centrality"])
-            print(f"Partitioned into {len(node_info["module_id"].unique())} modules")
         else:
             node_info = im.get_dataframe(["name", "module_id"])
         node_info = node_info.rename(columns={"name": "node", "module_id": "module"})
@@ -164,21 +257,46 @@ class NetworkOps:
             edge_attrs = {edges[j]: {"weight": new_weights[i, j]} for j in range(num_edges)}
             nx.set_edge_attributes(bootstrap, edge_attrs)
             bootstraps.append(bootstrap)
-
-        print(f"Poisson-resampled {num_bootstraps} bootstrap networks")
         return bootstraps
 
-    def significance_cluster(
+    def sig_cluster(
         self,
         partition: Partition,
         bootstraps: tuple[Partition],
     ) -> list[set[Node]]:
-        """Finds significant core of each module in the partition."""
-        sig_clu = SigClu(partition, bootstraps, self._config["sig_clu"])
-        return sig_clu.run()
+        """Finds significant core(s) of each module in the partition."""
+        cfg = self._config["sig_clu"]
+        sig_clu = SigClu(partition, bootstraps, cfg)
+        match cfg["scheme"]:
+            case SigCluScheme.STANDARD:
+                cores = sig_clu.run()
+            case SigCluScheme.RECURSIVE:
+                cores = []
+                for module in partition:
+                    thresh = cfg["thresh"] * len(module)
+
+                    sig_clu.partition = [module]
+                    core = sig_clu.run()[0]
+                    noise = module.difference(core)
+
+                    module_cores = []
+                    while len(core) >= thresh:
+                        module_cores.append(core)
+                        sig_clu.partition = [noise]
+                        core = sig_clu.run()[0]
+                        noise = noise.difference(core)
+                    cores.extend(module_cores)
+            case SigCluScheme.NONE:
+                return []
+        return cores
 
     def group_nodes_by_module(self, net: nx.DiGraph) -> Partition:
         """Groups nodes in a network into sets by their module."""
-        node_modules = list(net.nodes(data='module'))
+        node_modules = list(net.nodes(data="module"))
         df = pd.DataFrame(node_modules, columns=["node", "module"])
         return df.groupby("module")["node"].apply(set).tolist()
+
+    def get_num_modules(self, net: nx.DiGraph) -> int:
+        """Get the number of modules in a network."""
+        modules = {net.nodes[node]["module"] for node in net.nodes}
+        return len(modules)

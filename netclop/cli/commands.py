@@ -5,6 +5,7 @@ import numpy as np
 from ..config_loader import load_config, update_config
 from ..networkops import NetworkOps
 from ..plot import GeoPlot
+from ..sigcore import SigCluScheme
 from . import options
 
 DEF_CFG = load_config()
@@ -37,11 +38,11 @@ def construct(ctx, input_path, output_path, res):
     updated_cfg = {"binning": {"res": res}}
     update_config(ctx.obj["cfg"], updated_cfg)
 
-    netops = NetworkOps(ctx.obj["cfg"])
-    net = netops.from_positions(input_path)
+    nops = NetworkOps(ctx.obj["cfg"])
+    net = nops.from_positions(input_path)
 
     if output_path is not None:
-        netops.write_edgelist(net, output_path)
+        nops.write_edgelist(net, output_path)
 
 
 @netclop.command(name="partition")
@@ -87,42 +88,59 @@ def partition(
             },
         }
     update_config(ctx.obj["cfg"], updated_cfg)
+    cfg = ctx.obj["cfg"]
+    cfg["sig_clu"]["scheme"] = SigCluScheme[sig_clu]
+    nops = NetworkOps(cfg)
 
-    netops = NetworkOps(ctx.obj["cfg"])
+    net = nops.from_positions(input_path)
+    print(f"Construction: {len(net.nodes)} nodes, {len(net.edges)} links")
 
-    net = netops.from_positions(input_path)
-    netops.partition(net)
+    nops.partition(net)
+    print(f"Partition: {nops.get_num_modules(net)} modules")
 
-    if sig_clu:
-        bootstrap_nets = netops.make_bootstraps(net)
+    if cfg["sig_clu"]["scheme"] is not SigCluScheme.NONE:
+        bootstrap_nets = nops.make_bootstraps(net)
         for bootstrap in bootstrap_nets:
-            netops.partition(bootstrap, node_info=False)
+            nops.partition(bootstrap, node_info=False)
 
-        part = netops.group_nodes_by_module(net)
-        bootstrap_parts = [netops.group_nodes_by_module(bs_net) for bs_net in bootstrap_nets]
+        part = nops.group_nodes_by_module(net)
+        bootstrap_parts = [nops.group_nodes_by_module(bs_net) for bs_net in bootstrap_nets]
+        print(f"Bootstrap: Resampled {len(bootstrap_parts)} nets")
 
         counts = [len(bs_part) for bs_part in bootstrap_parts]
-        print(f"Partitioned into {np.mean(counts):.1f} +/- {np.std(counts):.1f} modules")
+        print(f"Bootstrap: Partition into {np.mean(counts):.1f} +/- {np.std(counts):.1f} modules")
 
-        cores = netops.significance_cluster(part, bootstrap_parts)
-        netops.compute_node_measures(net, cores)
+        cores = nops.sig_cluster(part, bootstrap_parts)
 
-    df = netops.to_dataframe(net, output_path)
+        nops.compute_node_measures(net, cores)
+
+    df = nops.to_dataframe(net, output_path)
 
     if do_plot:
         gplt = GeoPlot.from_dataframe(df)
-        gplt.plot(delineate_noise=sig_clu)
+        gplt.plot(sig_clu=cfg["sig_clu"]["scheme"])
         gplt.show()
 
 
 @netclop.command(name="plot")
 @options.io
 @options.plot
+@click.option(
+    "--significance-cluster", 
+    "-sc",
+    "sig_clu",
+    type=click.Choice([scheme.name for scheme in SigCluScheme], case_sensitive=False),
+    default="NONE",
+    show_default=True,
+    help="Scheme to demarcate significant community assignments from statistical noise.",
+)
 @click.pass_context
-def plot(ctx, input_path, output_path, delineate_noise):
+def plot(ctx, input_path, output_path, sig_clu):
     """Plots nodes."""
+    sig_clu = SigCluScheme[sig_clu]
+
     gplt = GeoPlot.from_file(input_path)
-    gplt.plot(delineate_noise=delineate_noise)
+    gplt.plot(sig_clu=sig_clu)
 
     if output_path is not None:
         gplt.save(output_path)
