@@ -30,17 +30,17 @@ class GeoPlot:
         """Shows plot."""
         self.fig.show()
 
-    def plot(self, sig_clu: SigCluScheme=SigCluScheme.NONE) -> None:
-        """Plots modular structure."""
+    def plot(self, sc_scheme: SigCluScheme=SigCluScheme.NONE) -> None:
+        """Plots structure."""
         gdf = self.gdf
 
         self._format_gdf()
-        self._color_modules(sig_clu)
+        self._color_modules(sc_scheme)
 
         self.fig = go.Figure()
         self.geojson = json.loads(gdf.to_json())
 
-        match sig_clu:
+        match sc_scheme:
             case SigCluScheme.NONE:
                 for idx, trace_gdf in self._get_traces(gdf, "module"):
                     self._add_trace(trace_gdf, idx)
@@ -48,7 +48,7 @@ class GeoPlot:
             case SigCluScheme.STANDARD:
                 for module_idx, module_gdf in self._get_traces(gdf, "module"):
                     for core_idx, core_gdf in self._get_traces(module_gdf, "core"):
-                        self._add_trace(core_gdf, module_idx, show_legend=bool(core_idx))
+                        self._add_trace(core_gdf, module_idx, legend=bool(core_idx))
                 legend_title = "Module"
             case SigCluScheme.RECURSIVE:
                 for idx, trace_gdf in self._get_traces(gdf, "core"):
@@ -63,7 +63,12 @@ class GeoPlot:
         gdf["module"] = gdf["module"].astype(str)
         gdf["node"] = gdf["node"].astype(int).apply(hex)
 
-    def _get_traces(self, gdf: gpd.GeoDataFrame, col: str) -> list[tuple[str, gpd.GeoDataFrame]]:
+    def _get_traces(
+        self,
+        gdf: gpd.GeoDataFrame,
+        col: str,
+    ) -> list[tuple[str | int, gpd.GeoDataFrame]]:
+        """Operation to get all traces and corresponding labels to add to plot."""
         traces = []
         trace_idx = self._get_sorted_unique_col(gdf, col)
         for idx in trace_idx:
@@ -71,7 +76,12 @@ class GeoPlot:
             traces.append((idx, trace_gdf))
         return traces
 
-    def _add_trace(self, trace_gdf: gpd.GeoDataFrame, label: str, show_legend: bool=True) -> None:
+    def _add_trace(
+        self,
+        trace_gdf: gpd.GeoDataFrame,
+        label: str,
+        legend: bool=True,
+    ) -> None:
         """Adds trace to plot."""
         if not trace_gdf.empty:
             color = trace_gdf["color"].unique().item()
@@ -81,7 +91,7 @@ class GeoPlot:
                 z=trace_gdf["module"],
                 name=label,
                 legendgroup=label,
-                showlegend=show_legend,
+                showlegend=legend,
                 colorscale=[(0, color), (1, color)],
                 marker={"line": {"width": 0.1, "color": "white"}},
                 showscale=False,

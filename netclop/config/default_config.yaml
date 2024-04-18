@@ -20,5 +20,6 @@ sig_clu:
   pen_weight: 1.0
   temp_init: 1.0
   cool_rate: 0.8
-  iter_max: 1000  # Maximum number of iterations
-  thresh: 0.03 # Minimum size of robust core relative to module (recursive only)
+  outer_iter: 3  # Number of outer iterations
+  inner_iter_max: 1000  # Maximum number of inner iterations
+  thresh: 0.03  # Minimum size of robust core relative to module (recursive only)

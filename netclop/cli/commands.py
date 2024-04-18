@@ -48,7 +48,7 @@ def construct(ctx, input_path, output_path, res):
 @netclop.command(name="partition")
 @options.io
 @options.binning
-@options.com_det
+@options.comm_detection
 @options.sig_clu
 @click.option(
     "--plot/--no-plot",
@@ -63,7 +63,7 @@ def partition(
     ctx,
     input_path,
     output_path,
-    sig_clu,
+    sc_scheme,
     res,
     markov_time,
     variable_markov_time,
@@ -89,7 +89,7 @@ def partition(
         }
     update_config(ctx.obj["cfg"], updated_cfg)
     cfg = ctx.obj["cfg"]
-    cfg["sig_clu"]["scheme"] = SigCluScheme[sig_clu]
+    cfg["sig_clu"]["scheme"] = SigCluScheme[sc_scheme]
     nops = NetworkOps(cfg)
 
     net = nops.from_positions(input_path)
@@ -118,29 +118,21 @@ def partition(
 
     if do_plot:
         gplt = GeoPlot.from_dataframe(df)
-        gplt.plot(sig_clu=cfg["sig_clu"]["scheme"])
+        gplt.plot(sc_scheme=cfg["sig_clu"]["scheme"])
         gplt.show()
 
 
 @netclop.command(name="plot")
 @options.io
 @options.plot
-@click.option(
-    "--significance-cluster", 
-    "-sc",
-    "sig_clu",
-    type=click.Choice([scheme.name for scheme in SigCluScheme], case_sensitive=False),
-    default="NONE",
-    show_default=True,
-    help="Scheme to demarcate significant community assignments from statistical noise.",
-)
+@options.sc_scheme
 @click.pass_context
-def plot(ctx, input_path, output_path, sig_clu):
+def plot(ctx, input_path, output_path, sc_scheme):
     """Plots nodes."""
-    sig_clu = SigCluScheme[sig_clu]
+    sc_scheme = SigCluScheme[sc_scheme]
 
     gplt = GeoPlot.from_file(input_path)
-    gplt.plot(sig_clu=sig_clu)
+    gplt.plot(sc_scheme=sc_scheme)
 
     if output_path is not None:
         gplt.save(output_path)

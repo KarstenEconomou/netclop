@@ -35,15 +35,32 @@ class SigClu:
         """Finds the significant cores of all modules."""
         cores = []
         for module in self.partition:
-            core = self.find_sig_core(module)
-            cores.append(core)
+            if self._module_is_trivial(module) or self._module_is_significant(module):
+                best_core = module
+            else:
+                best_core = {}
+                best_score = 0
+                for _ in range(self._config["outer_iter"]):
+                    (size, pen), core = self.find_sig_core(module)
+                    score = size - pen
+                    if score > best_score and pen == 0:
+                        best_core = core
+                        best_score = score
+            cores.append(best_core)
         return cores
 
-    def find_sig_core(self, module: set[Node]) -> set[Node]:
+    def _module_is_trivial(self, module: set[Node]) -> bool:
+        """Checks if a module is of trivial size."""
+        return len(module) <= 1
+
+    def _module_is_significant(self, module: set[Node]) -> bool:
+        """Checks if every node is significantly assigned to a module."""
+        (_, pen) = self._score(module, self._config["pen_weight"] * len(module))
+        return pen == 0
+
+    def find_sig_core(self, module: set[Node]) -> tuple[Score, set[Node]]:
         """Finds significant core of a module."""
         num_nodes = len(module)
-        if num_nodes <= 1:
-            return module
         module = list(module)
 
         pen_weighting = self._config["pen_weight"] * num_nodes
@@ -54,7 +71,7 @@ class SigClu:
         temp = self._config["temp_init"]
 
         # Core loop
-        for i in range(self._config["iter_max"]):
+        for i in range(self._config["inner_iter_max"]):
             did_accept = False
             for _ in range(num_nodes):
                 # Flip one random node's membership from candidate state and score
@@ -71,7 +88,7 @@ class SigClu:
             if not did_accept:
                 break
             temp = self._cool(i)
-        return state
+        return score, state
 
     def _score(self, nodes: set[Node], pen_weighting: float) -> Score:
         """Calculates measure of size for node set and penalty within bootstraps."""

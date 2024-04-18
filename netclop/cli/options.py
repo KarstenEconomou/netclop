@@ -3,7 +3,7 @@ import functools
 
 import click
 
-from ..config_loader import load_config, update_config
+from ..config_loader import load_config
 from ..sigcore import SigCluScheme
 
 DEF_CFG = load_config()
@@ -43,7 +43,7 @@ def binning(f):
     return wrapper_path_options
 
 
-def com_det(f):
+def comm_detection(f):
     """Community detection options."""
     @click.option(
         "--markov-time",
@@ -80,18 +80,26 @@ def com_det(f):
         return f(*args, **kwargs)
     return wrapper_path_options
 
-
-def sig_clu(f):
-    """Significance clustering flag and options."""
+def sc_scheme(f):
+    """Scheme options."""
     @click.option(
         "--significance-cluster", 
         "-sc",
-        "sig_clu",
+        "sc_scheme",
         type=click.Choice([scheme.name for scheme in SigCluScheme], case_sensitive=False),
         default="NONE",
         show_default=True,
         help="Scheme to demarcate significant community assignments from statistical noise.",
     )
+    @functools.wraps(f)
+    def wrapper_path_options(*args, **kwargs):
+        return f(*args, **kwargs)
+    return wrapper_path_options
+
+
+def sig_clu(f):
+    """Significance clustering scheme and options."""
+    @sc_scheme
     @click.option(
         "--cooling-rate",
         "-cr",
