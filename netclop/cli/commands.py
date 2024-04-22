@@ -98,21 +98,24 @@ def partition(
     nops.partition(net)
     print(f"Partition: {nops.get_num_modules(net)} modules")
 
-    if cfg["sig_clu"]["scheme"] is not SigCluScheme.NONE:
-        bootstrap_nets = nops.make_bootstraps(net)
-        for bootstrap in bootstrap_nets:
-            nops.partition(bootstrap, node_info=False)
+    match cfg["sig_clu"]["scheme"]:
+        case SigCluScheme.STANDARD | SigCluScheme.RECURSIVE:
+            bootstrap_nets = nops.make_bootstraps(net)
+            for bootstrap in bootstrap_nets:
+                nops.partition(bootstrap, node_info=False)
 
-        part = nops.group_nodes_by_module(net)
-        bootstrap_parts = [nops.group_nodes_by_module(bs_net) for bs_net in bootstrap_nets]
-        print(f"Bootstrap: Resampled {len(bootstrap_parts)} nets")
+            part = nops.group_nodes_by_module(net)
+            bootstrap_parts = [nops.group_nodes_by_module(bs_net) for bs_net in bootstrap_nets]
+            print(f"Bootstrap: Resampled {len(bootstrap_parts)} nets")
 
-        counts = [len(bs_part) for bs_part in bootstrap_parts]
-        print(f"Bootstrap: Partition into {np.mean(counts):.1f} +/- {np.std(counts):.1f} modules")
+            counts = [len(bs_part) for bs_part in bootstrap_parts]
+            print(f"Bootstrap: Partition into {np.mean(counts):.1f} +/- {np.std(counts):.1f} modules")
 
-        cores = nops.sig_cluster(part, bootstrap_parts)
+            cores = nops.sig_cluster(part, bootstrap_parts)
 
-        nops.compute_node_measures(net, cores)
+            nops.compute_node_measures(net, cores)
+        case SigCluScheme.NONE:
+            pass
 
     df = nops.to_dataframe(net, output_path)
 

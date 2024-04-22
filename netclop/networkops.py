@@ -229,6 +229,7 @@ class NetworkOps:
         )
         _ = im.add_networkx_graph(net, weight="weight")
         im.run()
+        print(im.codelength)
 
         # Set node attributes
         if node_info:
@@ -272,20 +273,21 @@ class NetworkOps:
                 cores = sig_clu.run()
             case SigCluScheme.RECURSIVE:
                 cores = []
-                for module in partition:
-                    thresh = cfg["thresh"] * len(module)
 
-                    sig_clu.partition = [module]
+                # Initialize
+                nodes = set.union(*partition)
+                core = nodes
+
+                # Loop to find each core above min size threshold
+                thresh = cfg["thresh"] * len(nodes)
+                while True:
+                    sig_clu.partition = [nodes]
                     core = sig_clu.run()[0]
-                    noise = module.difference(core)
-
-                    module_cores = []
-                    while len(core) >= thresh:
-                        module_cores.append(core)
-                        sig_clu.partition = [noise]
-                        core = sig_clu.run()[0]
-                        noise = noise.difference(core)
-                    cores.extend(module_cores)
+                    if len(core) >= thresh:
+                        cores.append(core)
+                        nodes.difference_update(core)  # Remove nodes in core
+                    else:
+                        break
             case SigCluScheme.NONE:
                 return []
         return cores
