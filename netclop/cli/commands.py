@@ -96,7 +96,7 @@ def partition(
     print(f"Construction: {len(net.nodes)} nodes, {len(net.edges)} links")
 
     nops.partition(net)
-    print(f"Partition: {nops.get_num_modules(net)} modules")
+    print(f"Partition: {nops.get_num_labels(net, "module")} modules")
 
     match cfg["sig_clu"]["scheme"]:
         case SigCluScheme.STANDARD | SigCluScheme.RECURSIVE:
@@ -104,8 +104,8 @@ def partition(
             for bootstrap in bootstrap_nets:
                 nops.partition(bootstrap, node_info=False)
 
-            part = nops.group_nodes_by_module(net)
-            bootstrap_parts = [nops.group_nodes_by_module(bs_net) for bs_net in bootstrap_nets]
+            part = nops.group_nodes_by_attr(net, "module")
+            bootstrap_parts = [nops.group_nodes_by_attr(bs_net, "module") for bs_net in bootstrap_nets]
             print(f"Bootstrap: Resampled {len(bootstrap_parts)} nets")
 
             counts = [len(bs_part) for bs_part in bootstrap_parts]
@@ -114,8 +114,10 @@ def partition(
             cores = nops.sig_cluster(part, bootstrap_parts)
 
             nops.compute_node_measures(net, cores)
+
+            print(nops.cohesion_mixing(net, "core"))
         case SigCluScheme.NONE:
-            pass
+            print(nops.cohesion_mixing(net, "module"))
 
     df = nops.to_dataframe(net, output_path)
 

@@ -72,6 +72,7 @@ class NetworkOps:
         ) -> list[int]:
             """Bins (lng, lat) coordinate pairs into an H3 cell."""
             return [h3.latlng_to_cell(lat, lng, res) for lat, lng in zip(lats, lngs)]
+
         srcs = bin_positions(data["initial_lng"], data["initial_lat"], resolution)
         tgts = bin_positions(data["final_lng"], data["final_lat"], resolution)
         edges = tuple(zip(srcs, tgts))
@@ -93,80 +94,81 @@ class NetworkOps:
         nx.relabel_nodes(net, dict((name, str(name)) for name in net.nodes), copy=False)
         return net
 
-    def get_module_list(self, net: nx.DiGraph) -> set:
-        """Gets set of module indices."""
-        return {net.nodes[node]["module"] for node in net.nodes}
+    def get_attr_list(self, net: nx.DiGraph, attr: str="module") -> set:
+        """Gets set of attr."""
+        return {net.nodes[node][attr] for node in net.nodes}
 
-    def modular_strength(self, net: nx.DiGraph) -> dict:
-        """Calculates strength measures of each module."""
-        modules = self.get_module_list(net)
+    def modular_strength(self, net: nx.DiGraph, attr: str="module") -> dict:
+        """Calculates strength measures of each label."""
+        labels = self.get_attr_list(net, attr)
         strength = {
-            module: {"ext": {"out": 0, "in": 0}, "int": 0} for module in modules
+            l: {"ext": {"out": 0, "in": 0}, "int": 0} for l in labels
         }
 
         for src, tgt, wgt in net.edges.data("weight"):
             # Out-edge of src, in-edge of tgt, with weight wgt
-            src_mod = net.nodes[src]["module"]
-            tgt_mod = net.nodes[tgt]["module"]
-            if src_mod != tgt_mod:
-                strength[src_mod]["ext"]["out"] += wgt
-                strength[tgt_mod]["ext"]["in"] += wgt
+            src_l = net.nodes[src][attr]
+            tgt_l = net.nodes[tgt][attr]
+            if src_l != tgt_l:
+                strength[src_l]["ext"]["out"] += wgt
+                strength[tgt_l]["ext"]["in"] += wgt
             else:
-                strength[src_mod]["int"] += wgt
+                strength[src_l]["int"] += wgt
 
         return strength
 
     def coherence_fortress(self, strength: dict) -> tuple[dict[int, float], dict[int, float]]:
-        """Computes the coherence and fortress of each module."""
+        """Computes the coherence and fortress of each label."""
         coherence = {}
         fortress = {}
-        for mod in strength.keys():
-            out_str = strength[mod]["int"] + strength[mod]["ext"]["out"]
-            in_str = strength[mod]["int"] + strength[mod]["ext"]["in"]
+        for l in strength.keys():
+            out_str = strength[l]["int"] + strength[l]["ext"]["out"]
+            in_str = strength[l]["int"] + strength[l]["ext"]["in"]
 
-            coherence[mod] = strength[mod]["int"] / out_str if out_str != 0 else 0
-            fortress[mod] = strength[mod]["int"] / in_str if in_str != 0 else 0
+            coherence[l] = strength[l]["int"] / out_str if out_str != 0 else 0
+            fortress[l] = strength[l]["int"] / in_str if in_str != 0 else 0
         return coherence, fortress
 
-    def cohesion_mixing(self, net: nx.DiGraph) -> tuple[float, float]:
+    def cohesion_mixing(self, net: nx.DiGraph, attr: str="module") -> tuple[float, float]:
         """Calculates cohesion and mixing of a partition."""
-        strength = self.modular_strength(net)
-        modules = strength.keys()
+        strength = self.modular_strength(net, attr)
+        labels = set(strength.keys()).difference({0})
 
-        net_str = sum(strength[mod]["int"] + strength[mod]["ext"]["out"] for mod in modules)
-        net_int_str = sum(strength[mod]["int"] for mod in modules)
+        net_str = sum(strength[l]["int"] + strength[l]["ext"]["out"] for l in labels)
+        net_int_str = sum(strength[l]["int"] for l in labels)
 
         cohesion = net_int_str / net_str
 
-        module_mixing = self.mixing(net)
-        mixing = sum(module_mixing[mod] * strength[mod]["int"] for mod in modules) / net_int_str
+        label_mix = self.mixing(net, attr)
+        mixing = sum(label_mix[l] * strength[l]["int"] for l in labels) / net_int_str
 
         return cohesion, mixing
 
-    def mixing(self, net: nx.DiGraph) -> float:
-        """Calculates the mixing parameter of each module."""
+    def mixing(self, net: nx.DiGraph, attr: str="module") -> dict[int, float]:
+        """Calculates the mixing parameter of each label."""
         mixing = {}
-        modules = self.group_nodes_by_module(net)
-        for mod in modules:
+        labels = self.group_nodes_by_attr(net, attr)
+        for l in labels:
             retain_wgts = []
-            for src in mod:
-                src_mod = net.nodes[src]["module"]
+            for src in l:
+                src_l = net.nodes[src][attr]
                 for tgt in net.successors(src):
-                    tgt_mod = net.nodes[tgt]["module"]
-                    if src_mod == tgt_mod:
+                    tgt_l = net.nodes[tgt][attr]
+                    if src_l == tgt_l:
                         wgt = net.get_edge_data(src, tgt)["weight"]
                         retain_wgts.append(wgt)
 
             total_retain_wgt = sum(retain_wgts)
             norm_wgts = [wgt / total_retain_wgt for wgt in retain_wgts]
 
-            mod_size = len(mod)
-            if mod_size > 1:
-                mixing[src_mod] = -sum(
-                    wgt * np.log2(wgt) for wgt in norm_wgts
-                ) / (mod_size * np.log2(mod_size))
-            else:
-                mixing[src_mod] = 0
+            if src_l != 0:
+                l_size = len(l)
+                if l_size > 1:
+                    mixing[src_l] = -sum(
+                        wgt * np.log2(wgt) for wgt in norm_wgts) / (l_size * np.log2(l_size)
+                    )
+                else:
+                    mixing[src_l] = 0
 
         return mixing
 
@@ -192,22 +194,22 @@ class NetworkOps:
             case _:
                 pass
 
-        # # In- and out-degree and strength
-        # in_degs = dict(net.in_degree())
-        # out_degs = dict(net.out_degree())
+        # In- and out-degree and strength
+        in_degs = dict(net.in_degree())
+        out_degs = dict(net.out_degree())
 
-        # in_strs = dict(net.in_degree(weight='weight'))
-        # out_strs = dict(net.out_degree(weight='weight'))
+        in_strs = dict(net.in_degree(weight='weight'))
+        out_strs = dict(net.out_degree(weight='weight'))
 
-        # # Betweenness
-        # betweenness_centrality = nx.betweenness_centrality(net)
+        # Betweenness
+        betweenness_centrality = nx.betweenness_centrality(net)
 
-        # # Update network with metrics
-        # nx.set_node_attributes(net, in_degs, "in_deg")
-        # nx.set_node_attributes(net, out_degs, "out_deg")
-        # nx.set_node_attributes(net, in_strs, "in_str")
-        # nx.set_node_attributes(net, out_strs, "out_str")
-        # nx.set_node_attributes(net, betweenness_centrality, "betweenness")
+        # Update network with metrics
+        nx.set_node_attributes(net, in_degs, "in_deg")
+        nx.set_node_attributes(net, out_degs, "out_deg")
+        nx.set_node_attributes(net, in_strs, "in_str")
+        nx.set_node_attributes(net, out_strs, "out_str")
+        nx.set_node_attributes(net, betweenness_centrality, "betweenness")
 
     def normalize_edge_weights(self, net: nx.DiGraph) -> None:
         """Normalizes out-edge weight distributions to sum to unity."""
@@ -229,7 +231,6 @@ class NetworkOps:
         )
         _ = im.add_networkx_graph(net, weight="weight")
         im.run()
-        print(im.codelength)
 
         # Set node attributes
         if node_info:
@@ -292,13 +293,13 @@ class NetworkOps:
                 return []
         return cores
 
-    def group_nodes_by_module(self, net: nx.DiGraph) -> Partition:
+    def group_nodes_by_attr(self, net: nx.DiGraph, attr: str="module") -> Partition:
         """Groups nodes in a network into sets by their module."""
-        node_modules = list(net.nodes(data="module"))
-        df = pd.DataFrame(node_modules, columns=["node", "module"])
-        return df.groupby("module")["node"].apply(set).tolist()
+        node_attr = list(net.nodes(data=attr))
+        df = pd.DataFrame(node_attr, columns=["node", attr])
+        return df.groupby(attr)["node"].apply(set).tolist()
 
-    def get_num_modules(self, net: nx.DiGraph) -> int:
-        """Get the number of modules in a network."""
-        modules = {net.nodes[node]["module"] for node in net.nodes}
-        return len(modules)
+    def get_num_labels(self, net: nx.DiGraph, attr: str="module") -> int:
+        """Get the number of labels in a network."""
+        attrs = {net.nodes[node][attr] for node in net.nodes}
+        return len(attrs)

@@ -22,4 +22,4 @@ sig_clu:
   cool_rate: 0.8
   outer_iter: 3  # Number of outer iterations
   inner_iter_max: 1000  # Maximum number of inner iterations
-  thresh: 0.01  # Minimum size of robust core relative to network (recursive only)
+  thresh: 0.01  # Minimum size of core relative to network (recursive only)
