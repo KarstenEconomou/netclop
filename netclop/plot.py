@@ -5,7 +5,6 @@ import typing
 
 import geopandas as gpd
 import h3.api.numpy_int as h3
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import shapely
@@ -62,7 +61,7 @@ class GeoPlot:
         """Formats gdf column types."""
         gdf = self.gdf
         gdf["module"] = gdf["module"].astype(str)
-        gdf["node"] = gdf["node"].astype(np.int64).apply(hex)
+        # gdf["node"] = gdf["node"].astype(int).apply(hex)
 
     def _get_traces(
         self,
