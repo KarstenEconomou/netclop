@@ -6,6 +6,7 @@ from ..config_loader import load_config, update_config
 from ..networkops import NetworkOps
 from ..plot import GeoPlot
 from ..sigcore import SigCluScheme
+from . import gui
 from . import options
 
 DEF_CFG = load_config()
@@ -29,7 +30,7 @@ def netclop(ctx, config_path):
     ctx.obj["cfg"] = cfg
 
 
-@netclop.command(name="construct")
+@click.command(name="construct")
 @options.io
 @options.binning
 @click.pass_context
@@ -45,21 +46,29 @@ def construct(ctx, input_path, output_path, res):
         nops.write_edgelist(net, output_path)
 
 
-@netclop.command(name="partition")
+@click.command(name="partition")
 @options.io
 @options.binning
 @options.comm_detection
 @options.sig_clu
+@click.option(
+    "--node-centrality/--no-node-centrality",
+    "calc_node_centrality",
+    is_flag=True,
+    show_default=True,
+    default=True,
+    help="Calculate node centrality indices.",
+)
 @click.option(
     "--plot/--no-plot",
     "do_plot",
     is_flag=True,
     show_default=True,
     default=True,
-    help="Show geographic plot of community structure.",
+    help="Display geographic plot.",
 )
 @click.pass_context
-def partition(
+def run(
     ctx,
     input_path,
     output_path,
@@ -70,9 +79,11 @@ def partition(
     num_trials,
     seed,
     cool_rate,
+    calc_node_centrality,
     do_plot,
 ):
-    """Runs significance clustering directly from LPT positions."""
+    """Community detection and significance clustering."""
+    gui.header("NETwork CLustering OPerations")
     updated_cfg = {
         "binning": {
             "res": res
@@ -85,46 +96,57 @@ def partition(
             },
         "sig_clu": {
             "cool_rate": cool_rate,
+            "scheme": SigCluScheme[sc_scheme],
             },
         }
     update_config(ctx.obj["cfg"], updated_cfg)
     cfg = ctx.obj["cfg"]
-    cfg["sig_clu"]["scheme"] = SigCluScheme[sc_scheme]
     nops = NetworkOps(cfg)
 
+    gui.subheader("Network construction")
     net = nops.from_positions(input_path)
-    print(f"Construction: {len(net.nodes)} nodes, {len(net.edges)} links")
+    gui.info("Nodes", len(net.nodes))
+    gui.info("Links", len(net.edges))
 
-    nops.partition(net)
-    print(f"Partition: {nops.get_num_labels(net, "module")} modules")
+    gui.subheader("Community detection")
+    nops.partition(net, set_node_attr=calc_node_centrality)
+    gui.info("Modules", nops.get_num_labels(net, "module"))
 
     match cfg["sig_clu"]["scheme"]:
         case SigCluScheme.STANDARD | SigCluScheme.RECURSIVE:
-            bootstrap_nets = nops.make_bootstraps(net)
-            for bootstrap in bootstrap_nets:
-                nops.partition(bootstrap, node_info=False)
+            gui.subheader("Network perturbation")
+
+            bs_nets = nops.make_bootstraps(net)
+            gui.info("Resampled nets", len(bs_nets))
+
+            for bs in bs_nets:
+                nops.partition(bs, set_node_attr=False)
 
             part = nops.group_nodes_by_attr(net, "module")
-            bootstrap_parts = [nops.group_nodes_by_attr(bs_net, "module") for bs_net in bootstrap_nets]
-            print(f"Bootstrap: Resampled {len(bootstrap_parts)} nets")
+            bs_parts = [nops.group_nodes_by_attr(bs, "module") for bs in bs_nets]
 
-            counts = [len(bs_part) for bs_part in bootstrap_parts]
-            print(f"Bootstrap: Partition into {np.mean(counts):.1f} +/- {np.std(counts):.1f} modules")
+            counts = [len(bs_part) for bs_part in bs_parts]
+            gui.info("Modules", f"{np.mean(counts):.1f} ± {np.std(counts):.1f}")
 
-            cores = nops.sig_cluster(part, bootstrap_parts)
+            gui.subheader("Significance clustering")
+            cores = nops.sig_cluster(part, bs_parts)
+            gui.info("Cores", len(cores))
 
-            nops.compute_node_measures(net, cores)
-
-            print(nops.cohesion_mixing(net, "core"))
+            nops.associate_node_assignments(net, cores)
         case SigCluScheme.NONE:
-            print(nops.cohesion_mixing(net, "module"))
+            pass
+
+    if calc_node_centrality:
+        nops.calc_node_centrality(net)
 
     df = nops.to_dataframe(net, output_path)
 
     if do_plot:
         gplt = GeoPlot.from_dataframe(df)
-        gplt.plot(sc_scheme=cfg["sig_clu"]["scheme"])
+        gplt.plot_structure(sc_scheme=cfg["sig_clu"]["scheme"])
         gplt.show()
+
+    gui.footer()
 
 
 @netclop.command(name="plot")
@@ -132,12 +154,43 @@ def partition(
 @options.plot
 @options.sc_scheme
 @click.pass_context
-def plot(ctx, input_path, output_path, sc_scheme):
-    """Plots nodes."""
+def plot_structure(ctx, input_path, output_path, sc_scheme):
+    """Plots structure."""
     sc_scheme = SigCluScheme[sc_scheme]
 
     gplt = GeoPlot.from_file(input_path)
-    gplt.plot(sc_scheme=sc_scheme)
+    gplt.plot_structure(sc_scheme=sc_scheme)
+
+    if output_path is not None:
+        gplt.save(output_path)
+    else:
+        gplt.show()
+
+@click.command(name="structure")
+@options.io
+@options.plot
+@options.sc_scheme
+@click.pass_context
+def plot_structure(ctx, input_path, output_path, sc_scheme):
+    """Plots network structure."""
+    sc_scheme = SigCluScheme[sc_scheme]
+
+    gplt = GeoPlot.from_file(input_path)
+    gplt.plot_structure(sc_scheme=sc_scheme)
+
+    if output_path is not None:
+        gplt.save(output_path)
+    else:
+        gplt.show()
+
+@click.command(name="centrality")
+@options.io
+@options.plot
+@click.pass_context
+def plot_centrality(ctx, input_path, output_path):
+    """Plots node centrality indices."""
+    gplt = GeoPlot.from_file(input_path)
+    gplt.plot_centrality()
 
     if output_path is not None:
         gplt.save(output_path)

@@ -1,6 +1,7 @@
 """Defines classes for significance clustering."""
 import dataclasses
 import enum
+import typing
 from collections import namedtuple
 
 import numpy as np
@@ -22,7 +23,7 @@ class SigCluScheme(enum.Enum):
 class SigClu:
     """Finds significant core of nodes within a module."""
     partition: Partition
-    bootstraps: tuple[Partition, ...]
+    bootstraps: typing.Sequence[Partition]
 
     _config: dict[str, any] = dataclasses.field(default_factory=lambda: load_config()["sig_clu"])
 

@@ -19,6 +19,11 @@ class GeoPlot:
     fig: go.Figure = dataclasses.field(init=False)
     geojson: dict = dataclasses.field(init=False)
 
+    def __post_init__(self):
+        self._format_gdf()
+        self.geojson = json.loads(self.gdf.to_json())
+        self.fig = go.Figure()
+
     def save(self, path) -> None:
         """Saves figure to static image."""
         dpi = 300
@@ -30,15 +35,15 @@ class GeoPlot:
         """Shows plot."""
         self.fig.show()
 
-    def plot(self, sc_scheme: SigCluScheme=SigCluScheme.NONE) -> None:
+    def plot_structure(
+        self,
+        sc_scheme: SigCluScheme=SigCluScheme.NONE,
+        mute_trivial: bool = False,
+    ) -> None:
         """Plots structure."""
         gdf = self.gdf
 
-        self._format_gdf()
-        self._color_modules(sc_scheme)
-
-        self.fig = go.Figure()
-        self.geojson = json.loads(gdf.to_json())
+        self._color_modules(sc_scheme, mute_trivial)
 
         match sc_scheme:
             case SigCluScheme.NONE:
@@ -55,7 +60,78 @@ class GeoPlot:
                     self._add_trace(trace_gdf, str(idx))
                 legend_title = "Core"
 
-        self._set_layout(legend_title)
+        self._set_layout()
+        self._set_legend(legend_title)
+
+    def plot_centrality(self) -> None:
+        gdf = self.gdf
+        centrality_indices = {
+            "out_deg": "Out-degree",
+            "in_deg": "In-degree",
+            "out_str": "Out-strength",
+            "in_str": "In-strength",
+            "btwn": "Betweenness",
+            "flow": "Flow",
+        }
+
+        customdata_columns = ["node", "module"] + list(centrality_indices.keys())
+        customdata = gdf[customdata_columns]
+
+        # Create a list of choropleth traces, one for each centrality index
+        choropleth_traces = []
+        for index, name in centrality_indices.items():
+            hovertemplate_parts = [
+                "<b>Node: </b>%{customdata[0]}",
+                "<b>Module: </b>%{customdata[1]}<br>",
+                "<b>Centrality</b>"
+            ]
+
+            for i, key in enumerate(centrality_indices.keys(), 2):
+                if gdf[key].dtype == 'int':
+                    format_str = f"{centrality_indices[key]}: %{{customdata[{i}]:,d}}"
+                else:
+                    format_str = f"{centrality_indices[key]}: %{{customdata[{i}]:.2e}}"
+                hovertemplate_parts.append(format_str)
+
+            hovertemplate = "<br>".join(hovertemplate_parts) + "<extra></extra>"
+
+            choropleth_traces.append(go.Choropleth(
+                geojson=self.geojson,
+                locations=gdf.index,
+                z=gdf[index],
+                marker={"line": {"width": 0.1, "color": "white"}},
+                showscale=True,
+                colorbar=dict(title=name),
+                colorscale="Viridis",
+                customdata=customdata,
+                hovertemplate=hovertemplate,
+                visible=(index == list(centrality_indices.keys())[0]),
+            ))
+
+        for trace in choropleth_traces:
+            self.fig.add_trace(trace)
+
+        # Create buttons for the dropdown menu
+        buttons = []
+        for i, (index, name) in enumerate(centrality_indices.items()):
+            buttons.append(dict(
+                method="update",
+                label=name,
+                args=[
+                    {"visible": [i == j for j in range(len(centrality_indices))]},
+                    {"coloraxis": {"colorbar": {"title": name}}},
+                ]
+            ))
+
+        self.fig.update_layout(
+            updatemenus=[{
+                "buttons": buttons,
+                "direction": "down",
+                "showactive": True,
+            }],
+        )
+
+        self._set_layout()
 
     def _format_gdf(self) -> None:
         """Formats gdf column types."""
@@ -81,10 +157,14 @@ class GeoPlot:
         trace_gdf: gpd.GeoDataFrame,
         label: str,
         legend: bool=True,
+        mute_trivial: bool=False,
     ) -> None:
         """Adds trace to plot."""
         if not trace_gdf.empty:
             color = trace_gdf["color"].unique().item()
+            if legend and mute_trivial and len(trace_gdf) == 1:
+                legend = False
+
             self.fig.add_trace(go.Choropleth(
                 geojson=self.geojson,
                 locations=trace_gdf.index,
@@ -100,7 +180,7 @@ class GeoPlot:
                 + "<extra></extra>"
             ))
 
-    def _set_layout(self, legend_title: str) -> None:
+    def _set_layout(self) -> None:
         """Sets basic figure layout with geography."""
         self.fig.update_layout(
             geo={
@@ -121,6 +201,11 @@ class GeoPlot:
                 "font_size": 12,
                 "font_family": "Arial",
             },
+        )
+
+    def _set_legend(self, title: str) -> None:
+        """Sets figure legend."""
+        self.fig.update_layout(
             legend={
                 "font_size": 12,
                 "orientation": "h",
@@ -128,13 +213,13 @@ class GeoPlot:
                 "y": 0.05,
                 "xanchor": "right",
                 "x": 0.98,
-                "title_text": legend_title,
+                "title_text": title,
                 "itemsizing": "constant",
                 "bgcolor": "rgba(255, 255, 255, 0)",
             },
         )
 
-    def _color_modules(self, sig_clu: SigCluScheme) -> None:
+    def _color_modules(self, sig_clu: SigCluScheme, mute_trivial: bool = False) -> None:
         """Assigns colors to modules based on significance, and marks trivial modules."""
         gdf = self.gdf
         gdf["module"] = gdf["module"].astype(str)
@@ -152,21 +237,32 @@ class GeoPlot:
             "9": {"core": "#FF97FF", "noise": "#FFD1FF"},
             "10": {"core": "#FECB52", "noise": "#FFE699"},
         }
+        n = len(colors)
+
+        def get_color(idx):
+            return colors[str((int(idx) - 1) % n + 1)]
 
         match sig_clu:
             case SigCluScheme.NONE:
-                gdf["color"] = gdf["module"].apply(
-                    lambda x: colors[x]["core"]
+                module_counts = gdf["module"].value_counts()
+
+                gdf["color"] = gdf.apply(
+                    lambda node: get_color(node["module"])["core"]
+                    if not (module_counts[node["module"]] == 1 and mute_trivial)
+                    else noise_color,
+                    axis=1
                 )
             case SigCluScheme.STANDARD:
                 gdf["color"] = gdf.apply(
-                    lambda row: colors[row["module"]]["core"] if row["core"]
-                    else colors[row["module"]]["noise"],
+                    lambda node: get_color(node["module"])["core"]
+                    if node["core"]
+                    else get_color(node["module"])["noise"],
                     axis=1
                 )
             case SigCluScheme.RECURSIVE:
                 gdf["color"] = gdf.apply(
-                    lambda row: colors[str(row["core"])]["core"] if row["core"]
+                    lambda node: get_color(node["core"])["core"]
+                    if node["core"]
                     else noise_color,
                     axis=1
                 )
@@ -219,7 +315,7 @@ class GeoPlot:
     @staticmethod
     def _get_sorted_unique_col(gdf: gpd.GeoDataFrame, col: str) -> list:
         """Get all unique entries of a gdf column sorted."""
-        return sorted(gdf[col].unique())
+        return sorted(gdf[col].unique(), key=int)
 
     @staticmethod
     def _filter_to_col_entry(gdf: gpd.GeoDataFrame, col: str, entry) -> gpd.GeoDataFrame:

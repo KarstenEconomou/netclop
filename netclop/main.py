@@ -22,7 +22,14 @@ def netclop(ctx, config_path):
         cfg.update(load_config(config_path))
     ctx.obj["cfg"] = cfg
 
+@netclop.group()
+def plot():
+    """Spatially-embedded network plotting."""
+    pass
+
 
 netclop.add_command(commands.construct)
-netclop.add_command(commands.partition)
-netclop.add_command(commands.plot)
+netclop.add_command(commands.run)
+
+plot.add_command(commands.plot_structure)
+plot.add_command(commands.plot_centrality)

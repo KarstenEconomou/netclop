@@ -25,11 +25,13 @@ class NetworkOps:
 
     def to_dataframe(self, net: nx.DiGraph, out_path: Path = None) -> pd.DataFrame:
         """Writes the network nodelist with attributes."""
-        df = pd.DataFrame.from_dict(dict(net.nodes(data=True)), orient='index')
+        df = pd.DataFrame.from_dict(dict(net.nodes(data=True)), orient="index")
         df.reset_index(inplace=True)
         df.rename(columns={"index": "node"}, inplace=True)
+
         if out_path is not None:
             df.to_csv(out_path, index=True)
+
         return df
 
     def write_edgelist(self, net: nx.DiGraph, path: Path) -> None:
@@ -172,12 +174,12 @@ class NetworkOps:
 
         return mixing
 
-    def compute_node_measures(
+    def associate_node_assignments(
         self,
         net: nx.DiGraph,
         cores: list[set[Node]]=None,
     ) -> None:
-        """Calculate node measures and save as attributes."""
+        """Saves node assignments as attributes."""
         match self._config["sig_clu"]["scheme"]:
             case SigCluScheme.STANDARD:
                 significant_nodes = set.union(*cores)
@@ -194,31 +196,22 @@ class NetworkOps:
             case _:
                 pass
 
-        # In- and out-degree and strength
-        in_degs = dict(net.in_degree())
-        out_degs = dict(net.out_degree())
-
-        in_strs = dict(net.in_degree(weight='weight'))
-        out_strs = dict(net.out_degree(weight='weight'))
-
-        # Betweenness
-        betweenness_centrality = nx.betweenness_centrality(net)
-
-        # Update network with metrics
-        nx.set_node_attributes(net, in_degs, "in_deg")
-        nx.set_node_attributes(net, out_degs, "out_deg")
-        nx.set_node_attributes(net, in_strs, "in_str")
-        nx.set_node_attributes(net, out_strs, "out_str")
-        nx.set_node_attributes(net, betweenness_centrality, "betweenness")
+    def calc_node_centrality(self, net: nx.DiGraph) -> None:
+        """Calculates node centrality measures and saves as attributes."""
+        nx.set_node_attributes(net, dict(net.in_degree()), "in_deg")
+        nx.set_node_attributes(net, dict(net.out_degree()), "out_deg")
+        nx.set_node_attributes(net, dict(net.in_degree(weight="weight")), "in_str")
+        nx.set_node_attributes(net, dict(net.out_degree(weight="weight")), "out_str")
+        nx.set_node_attributes(net, nx.betweenness_centrality(net), "btwn")
 
     def normalize_edge_weights(self, net: nx.DiGraph) -> None:
         """Normalizes out-edge weight distributions to sum to unity."""
         for u in net.nodes:
-            out_wgt = sum(weight for _, _, weight in net.out_edges(u, data='weight', default=0))
+            out_wgt = sum(weight for _, _, weight in net.out_edges(u, data="weight", default=0))
             for v in net.successors(u):
                 net[u][v]["weight_norm"] = net[u][v]["weight"] / out_wgt if out_wgt != 0 else 0
 
-    def partition(self, net: nx.DiGraph, node_info: bool = True) -> None:
+    def partition(self, net: nx.DiGraph, set_node_attr: bool = True) -> None:
         """Partitions a network."""
         im = Infomap(
             silent=True,
@@ -233,7 +226,7 @@ class NetworkOps:
         im.run()
 
         # Set node attributes
-        if node_info:
+        if set_node_attr:
             node_info = im.get_dataframe(["name", "module_id", "flow", "modular_centrality"])
         else:
             node_info = im.get_dataframe(["name", "module_id"])
@@ -264,7 +257,7 @@ class NetworkOps:
     def sig_cluster(
         self,
         partition: Partition,
-        bootstraps: tuple[Partition],
+        bootstraps: typing.Sequence[Partition],
     ) -> list[set[Node]]:
         """Finds significant core(s) of each module in the partition."""
         cfg = self._config["sig_clu"]
