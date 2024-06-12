@@ -1,4 +1,5 @@
 """Arguments and options for the CLI."""
+import enum
 import functools
 
 import click
@@ -7,6 +8,13 @@ from ..config_loader import load_config
 from ..sigcore import SigCluScheme
 
 DEF_CFG = load_config()
+
+
+class InputData(enum.Enum):
+    """Input data type."""
+    LPT = enum.auto()
+    NET = enum.auto()
+
 
 def io(f):
     """Input and output argument and option."""
@@ -79,6 +87,7 @@ def comm_detection(f):
     def wrapper_path_options(*args, **kwargs):
         return f(*args, **kwargs)
     return wrapper_path_options
+
 
 def sc_scheme(f):
     """Scheme options."""

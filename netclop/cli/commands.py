@@ -1,7 +1,9 @@
 """Commands for the CLI."""
-import click
-import numpy as np
+from pathlib import Path
 
+import click
+
+from .gui import report_average
 from ..config_loader import load_config, update_config
 from ..networkops import NetworkOps
 from ..plot import GeoPlot
@@ -40,25 +42,47 @@ def construct(ctx, input_path, output_path, res):
     update_config(ctx.obj["cfg"], updated_cfg)
 
     nops = NetworkOps(ctx.obj["cfg"])
-    net = nops.from_positions(input_path)
+    net = nops.net_from_positions(input_path)
 
     if output_path is not None:
         nops.write_edgelist(net, output_path)
 
 
-@click.command(name="partition")
-@options.io
+def read_net(nops: NetworkOps, input_path: Path, input_type: options.InputData) -> None:
+    """Reads a network from a file."""
+    match input_type:
+        case options.InputData.LPT:
+            net = nops.net_from_positions(input_path)
+        case options.InputData.NET:
+            net = nops.net_from_file(input_path)
+    return net
+
+
+@click.command(name="run")
+@click.argument(
+    "input-path",
+    type=click.Path(exists=True),
+)
+@click.option(
+    "--output",
+    "-o",
+    "output_path",
+    type=click.Path(),
+    required=False,
+    help="Output path where the nodelist will be saved.",
+)
+@click.option(
+    "--input-form",
+    "-i",
+    "input_type",
+    type=click.Choice([intype.name for intype in options.InputData], case_sensitive=False),
+    default="LPT",
+    show_default=True,
+    help="Input data type: LPT for start/end position pairs, NET for weighted edgelist.",
+)
 @options.binning
 @options.comm_detection
 @options.sig_clu
-@click.option(
-    "--node-centrality/--no-node-centrality",
-    "calc_node_centrality",
-    is_flag=True,
-    show_default=True,
-    default=True,
-    help="Calculate node centrality indices.",
-)
 @click.option(
     "--plot/--no-plot",
     "do_plot",
@@ -72,6 +96,7 @@ def run(
     ctx,
     input_path,
     output_path,
+    input_type,
     sc_scheme,
     res,
     markov_time,
@@ -79,10 +104,14 @@ def run(
     num_trials,
     seed,
     cool_rate,
-    calc_node_centrality,
     do_plot,
 ):
     """Community detection and significance clustering."""
+    input_path = Path(input_path)
+    input_type = options.InputData[input_type]
+    if input_path.is_dir():  # Necessitate ensemble input to use recursive sc
+        sc_scheme = "RECURSIVE"
+
     gui.header("NETwork CLustering OPerations")
     updated_cfg = {
         "binning": {
@@ -104,29 +133,43 @@ def run(
     nops = NetworkOps(cfg)
 
     gui.subheader("Network construction")
-    net = nops.from_positions(input_path)
-    gui.info("Nodes", len(net.nodes))
-    gui.info("Links", len(net.edges))
 
-    gui.subheader("Community detection")
-    nops.partition(net, set_node_attr=calc_node_centrality)
-    gui.info("Modules", nops.get_num_labels(net, "module"))
+    if input_path.is_file():
+        net = read_net(nops, input_path, input_type)
+
+        gui.info("Nodes", len(net.nodes))
+        gui.info("Links", len(net.edges))
+
+        nops.calc_node_centrality(net)
+
+        gui.subheader("Community detection")
+        nops.partition(net)
+        gui.info("Modules", nops.get_num_labels(net, "module"))
+    elif input_path.is_dir():
+        bs_nets = [read_net(nops, path, input_type) for path in input_path.glob('*.csv')]
+        gui.info("Replicate nets", len(bs_nets))
+        gui.report_average("Nodes", [len(bs_net.nodes) for bs_net in bs_nets])
+        gui.report_average("Edges", [len(bs_net.edges) for bs_net in bs_nets])
+
+        net = bs_nets[0]
 
     match cfg["sig_clu"]["scheme"]:
         case SigCluScheme.STANDARD | SigCluScheme.RECURSIVE:
-            gui.subheader("Network perturbation")
+            gui.subheader("Network ensemble")
 
-            bs_nets = nops.make_bootstraps(net)
-            gui.info("Resampled nets", len(bs_nets))
+            if input_path.is_file():
+                bs_nets = nops.make_bootstraps(net)
+                gui.info("Resampled nets", len(bs_nets))
+                part = nops.group_nodes_by_attr(net, "module")
+            elif input_path.is_dir():
+                part = [set().union(*[set(bs.nodes) for bs in bs_nets])]  # Dummy reference partition
 
+            bs_parts = []
             for bs in bs_nets:
                 nops.partition(bs, set_node_attr=False)
+                bs_parts.append(nops.group_nodes_by_attr(bs, "module"))
 
-            part = nops.group_nodes_by_attr(net, "module")
-            bs_parts = [nops.group_nodes_by_attr(bs, "module") for bs in bs_nets]
-
-            counts = [len(bs_part) for bs_part in bs_parts]
-            gui.info("Modules", f"{np.mean(counts):.1f} ± {np.std(counts):.1f}")
+            gui.report_average("Modules", [len(bs_part) for bs_part in bs_parts])
 
             gui.subheader("Significance clustering")
             cores = nops.sig_cluster(part, bs_parts)
@@ -135,9 +178,6 @@ def run(
             nops.associate_node_assignments(net, cores)
         case SigCluScheme.NONE:
             pass
-
-    if calc_node_centrality:
-        nops.calc_node_centrality(net)
 
     df = nops.to_dataframe(net, output_path)
 

@@ -44,8 +44,8 @@ class NetworkOps:
             data=["weight", "weight_norm"],
         )
 
-    def from_file(self, path: Path) -> nx.DiGraph:
-        """Constructs NetworkOps from edge list file."""
+    def net_from_file(self, path: Path) -> nx.DiGraph:
+        """Constructs a network from edgelist file."""
         net = nx.read_edgelist(
             path,
             comments="#",
@@ -56,7 +56,7 @@ class NetworkOps:
         )
         return net
 
-    def from_positions(self, path: Path) ->  nx.DiGraph:
+    def net_from_positions(self, path: Path) -> nx.DiGraph:
         """Constructs a network from file of initial and final coordinates."""
         data = pd.read_csv(
             path,
@@ -78,10 +78,10 @@ class NetworkOps:
         srcs = bin_positions(data["initial_lng"], data["initial_lat"], resolution)
         tgts = bin_positions(data["final_lng"], data["final_lat"], resolution)
         edges = tuple(zip(srcs, tgts))
-        return self.from_edgelist(edges)
+        return self.net_from_edgelist(edges)
 
-    def from_edgelist(self, edges: typing.Sequence[tuple[str, str]]) -> typing.Self:
-        """Constructs NetworkOps from edge list."""
+    def net_from_edgelist(self, edges: typing.Sequence[tuple[str, str]]) -> nx.DiGraph:
+        """Constructs a network from an edgelist with duplicates."""
         net = nx.DiGraph()
         for src, tgt in edges:
             if net.has_edge(src, tgt):
