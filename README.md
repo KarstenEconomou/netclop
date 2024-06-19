@@ -1,28 +1,28 @@
-# Network clustering operations
-**Net**work **cl**ustering **op**erations (netclop) is a command line interface for geophysical fluid transport network construction and associated clustering operations (e.g., community detection, significance clustering).
+[![PyPI version](https://badge.fury.io/py/netclop.svg)](https://badge.fury.io/py/netclop)
+# netclop
+**NETwork CLustering OPerations for Geophysical Fluid Transport.**
 
-## Installation
-Use [pipx](https://github.com/pypa/pipx) to install and run in an isolated environment.
-```
-brew install pipx
-pipx ensurepath
-```
+`netclop` is a command-line interface for constructing network models of geophysical fluid transport and performing associated clustering operations (e.g., community detection and significance clustering).
 
-To install:
-```
-pipx install netclop
-```
+## Features
+* Binning of Lagrangian particle simulations using [H3](https://github.com/uber/h3)
+* Network construction of fluid transport
+* Community detection using [Infomap](https://github.com/mapequation/infomap)
+* Network resampling and significance clustering
+* Node centrality calculation
+* Spatially-embedded network visualization
 
-To upgrade:
-```
-pipx upgrade netclop
-```
+## About
+`netclop` was created to facilitate network-theoretic analysis of marine connectivity in support of larval ecology.
+Developed at the Department of Engineering Mathematics and Internetworking, Dalhousie University by Karsten N. Economou.
 
-## Use
-Particle trajectories must be decomposed into initial and final latitude and longitude coordinates and stored in a positions file in the form `initial_latitude,initial_longitude,final_latitude,final_longitude`. Positions are binned with [H3](https://github.com/uber/h3-py). Community detection uses [Infomap](https://github.com/mapequation/infomap).
-
+## Usage
+Particle trajectories should be decomposed into initial and final positions in the `.csv` form and specified with `--input-data lpt`
 ```
-netclop [GLOBAL OPTIONS] COMMAND [ARGS] [OPTIONS]
+initial_latitude,initial_longitude,final_latitude,final_longitude
 ```
 
-Run `netclop --help` to see all available global options and commands and `netclop COMMAND --help` for the arguments and options of a command.
+Networks are given in the form of a weighted edgelist `.csv` with `--input-data net`
+```
+source_node,target_node,weight
+```
