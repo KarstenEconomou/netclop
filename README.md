@@ -4,7 +4,7 @@
 
 `netclop` is a command-line interface for constructing network models of geophysical fluid transport and performing associated clustering operations (e.g., community detection and significance clustering).
 
-![Robust cores of sea scallop connectivity community structure in the Northwest Atlantic](img/img.png)
+![Robust cores of sea scallop connectivity community structure in the Northwest Atlantic](https://github.com/KarstenEconomou/netclop/raw/main/img/img.png)
 
 ## Features
 * Binning of Lagrangian particle simulations using [H3](https://github.com/uber/h3)
@@ -19,7 +19,7 @@
 Developed at the Department of Engineering Mathematics and Internetworking, Dalhousie University by Karsten N. Economou.
 
 ## Usage
-Particle trajectories should be decomposed into initial and final positions in the `.csv` form and specified with `--input-data lpt`
+Particle trajectories should be decomposed into initial and final positions in `.csv` form and specified with `--input-data lpt`
 ```
 initial_latitude,initial_longitude,final_latitude,final_longitude
 ```
