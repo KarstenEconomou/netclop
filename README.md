@@ -1,8 +1,10 @@
 [![PyPI version](https://badge.fury.io/py/netclop.svg)](https://badge.fury.io/py/netclop)
 # netclop
-**NETwork CLustering OPerations for Geophysical Fluid Transport.**
+**NETwork CLustering OPerations for geophysical fluid transport.**
 
 `netclop` is a command-line interface for constructing network models of geophysical fluid transport and performing associated clustering operations (e.g., community detection and significance clustering).
+
+![Robust cores of sea scallop connectivity community structure in the Northwest Atlantic](img/img.png)
 
 ## Features
 * Binning of Lagrangian particle simulations using [H3](https://github.com/uber/h3)
