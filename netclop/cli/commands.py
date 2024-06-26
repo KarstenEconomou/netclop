@@ -185,18 +185,22 @@ def run(
     updated_cfg = {
         "binning": {
             "res": res
-            },
+        },
         "infomap": {
             "markov_time": markov_time,
             "variable_markov_time": variable_markov_time,
             "num_trials": num_trials,
             "seed": seed,
-            },
+        },
+        "bootstrap": {
+            "seed": seed,
+        },
         "sig_clu": {
             "cool_rate": cool_rate,
             "scheme": sc_scheme,
-            },
-        }
+            "seed": seed,
+        },
+    }
     update_config(ctx.obj["cfg"], updated_cfg)
     cfg = ctx.obj["cfg"]
     nops = NetworkOps(cfg)
