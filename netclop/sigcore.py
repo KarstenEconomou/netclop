@@ -74,7 +74,7 @@ class SigClu:
         # Core loop
         for i in range(self._config["inner_iter_max"]):
             did_accept = False
-            for _ in range(num_nodes):
+            for _ in range(num_nodes * self._config["perturb_scalar"]):
                 # Flip one random node's membership from candidate state and score
                 node = self._rng.choice(module)
                 new_state = self._flip(state, node)
