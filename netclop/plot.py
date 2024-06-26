@@ -165,6 +165,9 @@ class GeoPlot:
             if legend and mute_trivial and len(trace_gdf) == 1:
                 legend = False
 
+            if label == "0":
+                label = "Noise"
+
             self.fig.add_trace(go.Choropleth(
                 geojson=self.geojson,
                 locations=trace_gdf.index,
