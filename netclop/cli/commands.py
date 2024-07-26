@@ -7,8 +7,7 @@ import click
 from .utils import InputData, read_net
 from ..config_loader import load_config, update_config
 from ..networkops import NetworkOps
-from ..plot import GeoPlot
-from ..sigcore import SigCluScheme
+from ..plot import GeoPlot, UpSetPlot
 from . import gui
 
 DEF_CFG = load_config()
@@ -40,7 +39,7 @@ def netclop(ctx, config_path):
 @click.option(
     "--output",
     "-o",
-    "output_path",
+    "output_dir",
     type=click.Path(),
     required=False,
     help="Output file.",
@@ -65,7 +64,7 @@ def construct(ctx, input_path, output_path, res):
         nops.write_edgelist(net, output_path)
 
 
-@click.command(name="run")
+@click.command(name="rsc")
 @click.argument(
     "input-path",
     type=click.Path(exists=True),
@@ -73,10 +72,10 @@ def construct(ctx, input_path, output_path, res):
 @click.option(
     "--output",
     "-o",
-    "output_path",
-    type=click.Path(),
-    required=False,
-    help="Output path where the nodelist will be saved.",
+    "output_dir",
+    type=click.Path(file_okay=False, writable=True),
+    required=True,
+    help="Output directory.",
 )
 @click.option(
     "--input-data",
@@ -86,15 +85,6 @@ def construct(ctx, input_path, output_path, res):
     default="LPT",
     show_default=True,
     help="Input data type: LPT for start/end position pairs, NET for weighted edgelist.",
-)
-@click.option(
-    "--significance-cluster",
-    "-sc",
-    "sc_scheme",
-    type=click.Choice([scheme.name for scheme in SigCluScheme], case_sensitive=False),
-    default="NONE",
-    show_default=True,
-    help="Scheme to demarcate significant community assignments from statistical noise.",
 )
 @click.option(
     "--res",
@@ -137,49 +127,30 @@ def construct(ctx, input_path, output_path, res):
     "--cooling-rate",
     "-cr",
     "cool_rate",
-    type=float,
+    type=click.FloatRange(min=0, max=1, min_open=True, max_open=True),
     show_default=True,
     default=DEF_CFG["sig_clu"]["cool_rate"],
     help="Cooling rate in simulated annealing.",
 )
-@click.option(
-    "--plot/--no-plot",
-    "do_plot",
-    is_flag=True,
-    show_default=True,
-    default=True,
-    help="Display geographic plot.",
-)
-@click.option(
-    "--mute-trivial/--show-trivial",
-    "mute_trivial",
-    is_flag=True,
-    show_default=True,
-    default=True,
-    help="Grey trivial modules.",
-)
 @click.pass_context
-def run(
+def rsc(
     ctx,
     input_path,
-    output_path,
+    output_dir,
     input_type,
-    sc_scheme,
     res,
     markov_time,
     variable_markov_time,
     num_trials,
     seed,
     cool_rate,
-    do_plot,
-    mute_trivial,
 ):
     """Community detection and significance clustering."""
     input_path = Path(input_path)
     input_type = InputData[input_type]
-    sc_scheme = SigCluScheme[sc_scheme]
-    if input_path.is_dir():  # Necessitate ensemble input to use recursive sc
-        sc_scheme = SigCluScheme.RECURSIVE
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     gui.header("NETwork CLustering OPerations")
     updated_cfg = {
@@ -197,7 +168,6 @@ def run(
         },
         "sig_clu": {
             "cool_rate": cool_rate,
-            "scheme": sc_scheme,
             "seed": seed,
         },
     }
@@ -209,55 +179,54 @@ def run(
 
     if input_path.is_file():
         net = read_net(nops, input_path, input_type)
-
         gui.info("Nodes", len(net.nodes))
         gui.info("Links", len(net.edges))
-
-        nops.calc_node_centrality(net)
 
         gui.subheader("Community detection")
         nops.partition(net)
         gui.info("Modules", nops.get_num_labels(net, "module"))
     elif input_path.is_dir():
-        bs_nets = [read_net(nops, path, input_type) for path in input_path.glob('*.csv')]
-        gui.info("Replicate nets", len(bs_nets))
-        gui.report_average("Nodes", [len(bs_net.nodes) for bs_net in bs_nets])
-        gui.report_average("Edges", [len(bs_net.edges) for bs_net in bs_nets])
+        nets = [read_net(nops, path, input_type) for path in input_path.glob('*.csv')]
 
-        net = bs_nets[0]
+        gui.info("Replicate nets", len(nets))
+        gui.report_average("Nodes", [len(bs_net.nodes) for bs_net in nets])
+        gui.report_average("Edges", [len(bs_net.edges) for bs_net in nets])
 
-    match cfg["sig_clu"]["scheme"]:
-        case SigCluScheme.STANDARD | SigCluScheme.RECURSIVE:
-            gui.subheader("Network ensemble")
+        net = nets[0]
 
-            if input_path.is_file():
-                bs_nets = nops.make_bootstraps(net)
-                gui.info("Resampled nets", len(bs_nets))
-                part = nops.group_nodes_by_attr(net, "module")
-            elif input_path.is_dir():
-                part = [set().union(*[set(bs.nodes) for bs in bs_nets])]  # Dummy reference partition
+    gui.subheader("Network ensemble")
+    if input_path.is_file():
+        nets = nops.make_bootstrap_ensemble(net)
+        gui.info("Resampled nets", len(nets))
+        nodes = set(net.nodes)
+    elif input_path.is_dir():
+        nodes = set().union(*[set(n.nodes) for n in nets])
 
-            bs_parts = []
-            for bs in bs_nets:
-                nops.partition(bs, set_node_attr=False)
-                bs_parts.append(nops.group_nodes_by_attr(bs, "module"))
+    parts = []
+    for n in nets:
+        nops.partition(n, set_node_attr=False)
+        parts.append(nops.group_nodes_by_attr(n, "module"))
 
-            gui.report_average("Modules", [len(bs_part) for bs_part in bs_parts])
+    gui.report_average("Modules", [len(p) for p in parts])
 
-            gui.subheader("Significance clustering")
-            cores = nops.sig_cluster(part, bs_parts)
-            gui.info("Cores", len(cores))
+    gui.subheader("Significance clustering")
+    cores = nops.sig_clu(nodes, parts)
+    gui.info("Cores", len(cores))
 
-            nops.associate_node_assignments(net, cores)
-        case SigCluScheme.NONE:
-            pass
+    nops.associate_node_assignments(net, cores)
+    nops.calc_node_centrality(net)
 
-    df = nops.to_dataframe(net, output_path)
+    # Save
+    filename = f"{input_path.stem}_S{seed}"
+    df = nops.to_dataframe(net)
+    df.to_csv(output_dir / f"{filename}_nodes.csv", index=True)
 
-    if do_plot:
-        gplt = GeoPlot.from_dataframe(df)
-        gplt.plot_structure(sc_scheme=cfg["sig_clu"]["scheme"], mute_trivial=mute_trivial)
-        gplt.show()
+    gplt = GeoPlot.from_dataframe(df)
+    gplt.plot_structure()
+    gplt.save(output_dir / f"{filename}_plt.png")
+
+    usplt = UpSetPlot(cores, nets, parts)
+    usplt.save(output_dir / f"{filename}_upset.png")
 
     gui.footer()
 
@@ -275,30 +244,11 @@ def run(
     required=False,
     help="Output file.",
 )
-@click.option(
-    "--significance-cluster",
-    "-sc",
-    "sc_scheme",
-    type=click.Choice([scheme.name for scheme in SigCluScheme], case_sensitive=False),
-    default="NONE",
-    show_default=True,
-    help="Scheme to demarcate significant community assignments from statistical noise.",
-)
-@click.option(
-    "--mute-trivial/--show-trivial",
-    "mute_trivial",
-    is_flag=True,
-    show_default=True,
-    default=True,
-    help="Grey trivial modules.",
-)
 @click.pass_context
 def plot_structure(ctx, input_path, output_path, sc_scheme, mute_trivial):
     """Plots structure."""
-    sc_scheme = SigCluScheme[sc_scheme]
-
     gplt = GeoPlot.from_file(input_path)
-    gplt.plot_structure(sc_scheme=sc_scheme, mute_trivial=mute_trivial)
+    gplt.plot_structure()
 
     if output_path is not None:
         gplt.save(output_path)

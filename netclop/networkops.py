@@ -10,28 +10,25 @@ from infomap import Infomap
 
 from .config_loader import load_config, update_config
 from .constants import Node, Partition, Path
-from .sigcore import SigClu, SigCluScheme
+from .sigcore import SigClu
 
 CONFIG = load_config()
+
 
 @dataclasses.dataclass
 class NetworkOps:
     """Network operations."""
-    _config: dict[str, any] = dataclasses.field(default_factory=lambda: load_config())
+    _cfg: dict[str, any] = dataclasses.field(default_factory=lambda: load_config())
 
     def update_config(self, cfg_update: dict) -> None:
         """Updates operation configuration."""
-        update_config(self._config, cfg_update)
+        update_config(self._cfg, cfg_update)
 
-    def to_dataframe(self, net: nx.DiGraph, out_path: Path = None) -> pd.DataFrame:
+    def to_dataframe(self, net: nx.DiGraph) -> pd.DataFrame:
         """Writes the network nodelist with attributes."""
         df = pd.DataFrame.from_dict(dict(net.nodes(data=True)), orient="index")
         df.reset_index(inplace=True)
         df.rename(columns={"index": "node"}, inplace=True)
-
-        if out_path is not None:
-            df.to_csv(out_path, index=True)
-
         return df
 
     def write_edgelist(self, net: nx.DiGraph, path: Path) -> None:
@@ -65,7 +62,7 @@ class NetworkOps:
             comment="#",
         )
 
-        resolution = self._config["binning"]["res"]
+        resolution = self._cfg["binning"]["res"]
 
         def bin_positions(
             lngs: typing.Sequence[float],
@@ -174,29 +171,18 @@ class NetworkOps:
 
         return mixing
 
-    def associate_node_assignments(
-        self,
-        net: nx.DiGraph,
-        cores: list[set[Node]]=None,
-    ) -> None:
+    @staticmethod
+    def associate_node_assignments(net: nx.DiGraph, cores: list[set[Node]]) -> None:
         """Saves node assignments as attributes."""
-        match self._config["sig_clu"]["scheme"]:
-            case SigCluScheme.STANDARD:
-                significant_nodes = set.union(*cores)
-                for node in net.nodes():
-                    net.nodes[node]["core"] = int(node in significant_nodes)
-            case SigCluScheme.RECURSIVE:
-                sorted_cores = sorted(cores, key=len, reverse=True)
-                node_to_core = {}
-                for index, node_set in enumerate(sorted_cores, start=1):
-                    for node in node_set:
-                        node_to_core[node] = index
-                for node in net.nodes:
-                    net.nodes[node]["core"] = node_to_core.get(node, 0)
-            case _:
-                pass
+        node_to_core = {}
+        for index, node_set in enumerate(cores, 1):
+            for node in node_set:
+                node_to_core[node] = index
+        for node in net.nodes:
+            net.nodes[node]["core"] = node_to_core.get(node, 0)
 
-    def calc_node_centrality(self, net: nx.DiGraph) -> None:
+    @staticmethod
+    def calc_node_centrality(net: nx.DiGraph) -> None:
         """Calculates node centrality measures and saves as attributes."""
         nx.set_node_attributes(net, dict(net.in_degree()), "in_deg")
         nx.set_node_attributes(net, dict(net.out_degree()), "out_deg")
@@ -204,7 +190,8 @@ class NetworkOps:
         nx.set_node_attributes(net, dict(net.out_degree(weight="weight")), "out_str")
         nx.set_node_attributes(net, nx.betweenness_centrality(net), "btwn")
 
-    def normalize_edge_weights(self, net: nx.DiGraph) -> None:
+    @staticmethod
+    def normalize_edge_weights(net: nx.DiGraph) -> None:
         """Normalizes out-edge weight distributions to sum to unity."""
         for u in net.nodes:
             out_wgt = sum(weight for _, _, weight in net.out_edges(u, data="weight", default=0))
@@ -217,10 +204,10 @@ class NetworkOps:
             silent=True,
             two_level=True,
             flow_model="directed",
-            seed=self._config["infomap"]["seed"],
-            num_trials=self._config["infomap"]["num_trials"],
-            markov_time=self._config["infomap"]["markov_time"],
-            variable_markov_time=self._config["infomap"]["variable_markov_time"],
+            seed=self._cfg["infomap"]["seed"],
+            num_trials=self._cfg["infomap"]["num_trials"],
+            markov_time=self._cfg["infomap"]["markov_time"],
+            variable_markov_time=self._cfg["infomap"]["variable_markov_time"],
         )
         _ = im.add_networkx_graph(net, weight="weight")
         im.run()
@@ -235,15 +222,15 @@ class NetworkOps:
         modular_desc = node_info.set_index("node").to_dict(orient="index")
         nx.set_node_attributes(net, modular_desc)
 
-    def make_bootstraps(self, net: nx.DiGraph) -> tuple[nx.DiGraph, ...]:
+    def make_bootstrap_ensemble(self, net: nx.DiGraph) -> tuple[nx.DiGraph, ...]:
         """Resample edge weights."""
         edges, weights = zip(*nx.get_edge_attributes(net, 'weight').items())
         weights = np.array(weights)
         num_edges = len(edges)
 
-        num_bootstraps = self._config["bootstrap"]["num_bootstraps"]
+        num_bootstraps = self._cfg["bootstrap"]["num_bootstraps"]
 
-        rng = np.random.default_rng(self._config["bootstrap"]["seed"])
+        rng = np.random.default_rng(self._cfg["bootstrap"]["seed"])
         new_weights = rng.poisson(lam=weights.reshape(1, -1), size=(num_bootstraps, num_edges))
 
         bootstraps = []
@@ -254,36 +241,14 @@ class NetworkOps:
             bootstraps.append(bootstrap)
         return bootstraps
 
-    def sig_cluster(
+    def sig_clu(
         self,
-        partition: Partition,
-        bootstraps: typing.Sequence[Partition],
+        nodes: set[Node],
+        nets: typing.Sequence[Partition],
     ) -> list[set[Node]]:
-        """Finds significant core(s) of each module in the partition."""
-        cfg = self._config["sig_clu"]
-        sig_clu = SigClu(partition, bootstraps, cfg)
-        match cfg["scheme"]:
-            case SigCluScheme.STANDARD:
-                cores = sig_clu.run()
-            case SigCluScheme.RECURSIVE:
-                cores = []
-
-                # Initialize
-                nodes = set.union(*partition)
-                core = nodes
-
-                # Loop to find each core above min size threshold
-                thresh = cfg["thresh"] * len(nodes)
-                while True:
-                    sig_clu.partition = [nodes]
-                    core = sig_clu.run()[0]
-                    if len(core) >= thresh:
-                        cores.append(core)
-                        nodes.difference_update(core)  # Remove nodes in core
-                    else:
-                        break
-            case SigCluScheme.NONE:
-                return []
+        """Finds core(s) of each module in the partition."""
+        sig_clu = SigClu(nodes, nets, self._cfg["sig_clu"])
+        cores = sig_clu.run()
         return cores
 
     def group_nodes_by_attr(self, net: nx.DiGraph, attr: str="module") -> Partition:

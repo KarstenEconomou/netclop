@@ -29,7 +29,7 @@ def plot():
 
 
 netclop.add_command(commands.construct)
-netclop.add_command(commands.run)
+netclop.add_command(commands.rsc)
 
 plot.add_command(commands.plot_structure)
 plot.add_command(commands.plot_centrality)

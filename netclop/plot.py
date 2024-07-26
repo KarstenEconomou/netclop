@@ -1,16 +1,23 @@
-"""Defines the GeoPlot class."""
+"""Defines the GeoPlot and UpsetPlot class."""
+import collections
 import dataclasses
+import itertools
 import json
 import typing
 
 import geopandas as gpd
 import h3.api.numpy_int as h3
+import matplotlib.pyplot as plt
+import networkx as nx
 import pandas as pd
 import plotly.graph_objects as go
 import shapely
+from matplotlib.ticker import FormatStrFormatter
+from upsetplot import UpSet
 
-from .constants import Path
-from .sigcore import SigCluScheme
+from .constants import Node, Partition, Path
+
+DPI = 900
 
 @dataclasses.dataclass
 class GeoPlot:
@@ -26,42 +33,24 @@ class GeoPlot:
 
     def save(self, path) -> None:
         """Saves figure to static image."""
-        dpi = 300
         width = 5  # inches
         height = 3  # inches
-        self.fig.write_image(path, height=height * dpi, width=width * dpi, scale=1)
+        self.fig.write_image(path, height=height * DPI, width=width * DPI, scale=1)
 
     def show(self) -> None:
         """Shows plot."""
         self.fig.show()
 
-    def plot_structure(
-        self,
-        sc_scheme: SigCluScheme=SigCluScheme.NONE,
-        mute_trivial: bool = False,
-    ) -> None:
+    def plot_structure(self) -> None:
         """Plots structure."""
         gdf = self.gdf
 
-        self._color_modules(sc_scheme, mute_trivial)
-
-        match sc_scheme:
-            case SigCluScheme.NONE:
-                for idx, trace_gdf in self._get_traces(gdf, "module"):
-                    self._add_trace(trace_gdf, idx)
-                legend_title = "Module"
-            case SigCluScheme.STANDARD:
-                for module_idx, module_gdf in self._get_traces(gdf, "module"):
-                    for core_idx, core_gdf in self._get_traces(module_gdf, "core"):
-                        self._add_trace(core_gdf, module_idx, legend=bool(core_idx))
-                legend_title = "Module"
-            case SigCluScheme.RECURSIVE:
-                for idx, trace_gdf in self._get_traces(gdf, "core"):
-                    self._add_trace(trace_gdf, str(idx))
-                legend_title = "Core"
+        self._color_cores()
+        for idx, trace_gdf in self._get_traces(gdf, "core"):
+            self._add_trace(trace_gdf, str(idx))
 
         self._set_layout()
-        self._set_legend(legend_title)
+        self._set_legend()
 
     def plot_centrality(self) -> None:
         gdf = self.gdf
@@ -206,69 +195,48 @@ class GeoPlot:
             },
         )
 
-    def _set_legend(self, title: str) -> None:
+    def _set_legend(self) -> None:
         """Sets figure legend."""
         self.fig.update_layout(
             legend={
-                "font_size": 12,
+                "font_size": 10,
                 "orientation": "h",
                 "yanchor": "top",
                 "y": 0.05,
                 "xanchor": "right",
                 "x": 0.98,
-                "title_text": title,
+                "title_text": "Core",
                 "itemsizing": "constant",
                 "bgcolor": "rgba(255, 255, 255, 0)",
             },
         )
 
-    def _color_modules(self, sig_clu: SigCluScheme, mute_trivial: bool = False) -> None:
-        """Assigns colors to modules based on significance, and marks trivial modules."""
+    def _color_cores(self) -> None:
+        """Assigns colors to cores."""
         gdf = self.gdf
         gdf["module"] = gdf["module"].astype(str)
 
         noise_color = "#CCCCCC"
-        colors = {  # Core index zero reserved for recursive noise
-            "1": {"core": "#636EFA", "noise": "#A9B8FA"},
-            "2": {"core": "#EF553B", "noise": "#FAB9B5"},
-            "3": {"core": "#00CC96", "noise": "#80E2C1"},
-            "4": {"core": "#FFA15A", "noise": "#FFD1A9"},
-            "5": {"core": "#AB63FA", "noise": "#D4B5FA"},
-            "6": {"core": "#19D3F3", "noise": "#8CEAFF"},
-            "7": {"core": "#FF6692", "noise": "#FFB5C5"},
-            "8": {"core": "#B6E880", "noise": "#DAFAB6"},
-            "9": {"core": "#FF97FF", "noise": "#FFD1FF"},
-            "10": {"core": "#FECB52", "noise": "#FFE699"},
+        colors = {  # Core index zero reserved for noise
+            "1": "#636EFA",
+            "2": "#EF553B",
+            "3": "#00CC96",
+            "4": "#FFA15A",
+            "5": "#AB63FA",
+            "6": "#19D3F3",
+            "7": "#FF6692",
+            "8": "#B6E880",
+            "9": "#FF97FF",
+            "10": "#FECB52",
         }
-        n = len(colors)
 
-        def get_color(idx):
-            return colors[str((int(idx) - 1) % n + 1)]
-
-        match sig_clu:
-            case SigCluScheme.NONE:
-                module_counts = gdf["module"].value_counts()
-
-                gdf["color"] = gdf.apply(
-                    lambda node: get_color(node["module"])["core"]
-                    if not (module_counts[node["module"]] == 1 and mute_trivial)
-                    else noise_color,
-                    axis=1
-                )
-            case SigCluScheme.STANDARD:
-                gdf["color"] = gdf.apply(
-                    lambda node: get_color(node["module"])["core"]
-                    if node["core"]
-                    else get_color(node["module"])["noise"],
-                    axis=1
-                )
-            case SigCluScheme.RECURSIVE:
-                gdf["color"] = gdf.apply(
-                    lambda node: get_color(node["core"])["core"]
-                    if node["core"]
-                    else noise_color,
-                    axis=1
-                )
+        n_colors = len(colors)
+        gdf["color"] = gdf.apply(
+            lambda node: colors[str((int(node["core"]) - 1) % n_colors + 1)]
+            if node["core"]
+            else noise_color,
+            axis=1
+        )
 
         self.gdf = gdf
 
@@ -324,3 +292,156 @@ class GeoPlot:
     def _filter_to_col_entry(gdf: gpd.GeoDataFrame, col: str, entry) -> gpd.GeoDataFrame:
         """Get subset of gdf with column equal to a certain entry."""
         return gdf[gdf[col] == entry]
+
+@dataclasses.dataclass
+class UpSetPlot:
+    cores: list[set[Node]]
+    nets: list[nx.DiGraph]
+    parts: list[Partition]
+
+    def count_coalescence(self) -> tuple[dict[tuple[int, ...], int], dict[tuple[int, ...], float]]:
+        """Counts coalescence of cores across partitions."""
+        counts = collections.defaultdict(int)
+        coherences = collections.defaultdict(list)
+
+        for net, part in zip(self.nets, self.parts):
+            prev_supcores = []
+            for r in range(len(self.cores), 0, -1):
+                for comb in itertools.combinations(enumerate(self.cores), r):
+                    indices, sets = zip(*comb)
+
+                    supcore = frozenset().union(*sets)  # Flatten cores to super-core
+                    supcore_key = frozenset(indices)  # Key to identify super-core
+
+                    # Check if mutually assigned
+                    if any(supcore.issubset(module) for module in part):
+                        # Check if comb is subset of a larger combination already counted
+                        if not any(supcore_key.issubset(prev) for prev in prev_supcores):
+                            prev_supcores.append(supcore_key)  # Save assignment
+                            counts[supcore_key] += 1
+                            coherences[supcore_key].append(self.calculate_coherence(net, supcore))
+        return counts, coherences
+
+    def prep_data(self, counts: dict[tuple[int, ...], int], coherences: dict[tuple[int, ...], float]) -> pd.DataFrame:
+        """Generates multi-index series from coalescence count data."""
+        bools = list(itertools.product([True, False], repeat=len(self.cores)))
+        labels = list(range(len(self.cores)))
+
+        multi_index = pd.MultiIndex.from_tuples(bools, names=labels)
+        data = pd.Series(0.0, index=multi_index)
+        coherence = pd.Series([[] for _ in range(len(data))], index=multi_index)
+
+        for key, count in counts.items():
+            condition = pd.Series([True] * len(data), index=data.index)
+            coh = coherences.get(key, [])
+
+            for label in labels:
+                if label in key:
+                    condition &= data.index.get_level_values(label)
+                else:
+                    condition &= ~data.index.get_level_values(label)
+            data[condition] = count / (len(self.parts) * len(coh))
+            for idx in data[condition].index:
+                coherence[idx] = frozenset(coh)
+
+        df = pd.DataFrame({'count': data, 'coherence': coherence})
+
+        def sort_key(index_tuple):
+            true_count = sum(index_tuple)
+            order = [i for i, val in enumerate(index_tuple) if val]
+            return (true_count, order)
+
+        sorted_index = sorted(df.index, key=sort_key)
+        df = df.reindex(sorted_index)
+
+        df = df.explode("coherence")
+        df.index = pd.MultiIndex.from_tuples(df.index, names=labels)
+
+        return df
+
+    def plot(self, data: pd.DataFrame, path: Path) -> None:
+        """Make UpSet plot."""
+        plt.rc("font", family="Arial", size=10)
+        upset = UpSet(
+            data,
+            sum_over="count",
+            min_subset_size=0.02,
+            sort_by="cardinality",
+            sort_categories_by="input",
+            facecolor="black",
+            shading_color=0.0,
+            intersection_plot_elements=5,
+            totals_plot_elements=2,
+        )
+
+        upset.add_catplot(kind="strip", value="coherence", color="black", size=0.9)
+
+        # Color shading by core
+        colors = ["#636EFA", "#EF553B", "#00CC96", "#FFA15A", "#AB63FA",
+                  "#19D3F3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"]
+        colors = [color.lstrip("#") for color in colors]
+        colors = [tuple(int(color[i:i + 2], 16) / 255 for i in (0, 2, 4)) + (0.2,) for color in colors]
+        for label, color in zip(data.index.names, colors):
+            upset.style_categories([label], shading_facecolor=color)
+
+        # Setup fig and ax
+        fig = plt.figure(figsize=(3.375, 3.375), dpi=DPI)
+        ax = upset.plot(fig=fig)
+
+        grid_linewidth = 0.25
+        tick_linewidth = 0.5
+
+        # Intersections
+        ax["intersections"].set_ylabel("Coalescence frequency")
+        ax["intersections"].axhline(y=0.95, color="gray", linestyle='--', linewidth=grid_linewidth)
+        ax["intersections"].set_ylim(0.0, 1.0)
+        ax["intersections"].grid(linewidth=grid_linewidth)
+        ax["intersections"].yaxis.set_tick_params(width=tick_linewidth)
+        ax["intersections"].spines["left"].set_linewidth(tick_linewidth)
+        ax["intersections"].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+
+        # Relabel cores from 1
+        current_labels = [int(label.get_text()) for label in ax["matrix"].get_yticklabels()]
+        new_labels = [str(label + 1) for label in current_labels]
+        ax["matrix"].set_yticklabels(new_labels)
+
+        # Totals
+        ax["totals"].set_xlabel("Stability")
+        ax["totals"].set_xlim(1.00, 0.95)
+        ax["totals"].xaxis.set_tick_params(width=tick_linewidth)
+        ax["totals"].spines["bottom"].set_linewidth(tick_linewidth)
+        ax["totals"].grid(linewidth=grid_linewidth)
+
+        # Dist
+        ax["extra1"].set_ylabel("Coherence")
+        ax["extra1"].set_ylim(top=1.0)
+        # ax["extra1"].set_yticks([0.5, 0.8, 0.9, 1.0])
+        ax["extra1"].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+        ax["extra1"].grid(linewidth=grid_linewidth)
+        ax["extra1"].yaxis.set_tick_params(width=tick_linewidth)
+        ax["extra1"].spines["left"].set_linewidth(tick_linewidth)
+
+        # plt.show()
+        plt.savefig(path, bbox_inches="tight")
+
+    def save(self, path: Path):
+        """Produce plot."""
+        counts, coherences = self.count_coalescence()
+        data = self.prep_data(counts, coherences)
+        self.plot(data, path)
+
+    @staticmethod
+    def calculate_coherence(net: nx.DiGraph, nodes: set | frozenset) -> float:
+        """Calculates the coherence ratio of a subset of nodes."""
+        int_wgt, ext_wgt = 0, 0
+
+        for src in nodes:
+            for _, tgt, wgt in net.out_edges(src, data="weight"):
+                if tgt in nodes:
+                    int_wgt += wgt
+                else:
+                    ext_wgt += wgt
+
+        if int_wgt == 0:
+            return 0.0
+        return int_wgt / (int_wgt + ext_wgt)

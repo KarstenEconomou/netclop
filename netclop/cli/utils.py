@@ -20,3 +20,4 @@ def read_net(nops: NetworkOps, input_path: Path, input_type: InputData) -> DiGra
         case InputData.NET:
             net = nops.net_from_file(input_path)
     return net
+

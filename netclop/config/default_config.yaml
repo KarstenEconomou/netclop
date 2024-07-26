@@ -7,7 +7,7 @@ binning:
 infomap:
   <<: *defaults
   num_trials: 5
-  markov_time: 2.0
+  markov_time: 1.0
   variable_markov_time: true
 
 bootstrap:
@@ -19,8 +19,8 @@ sig_clu:
   sig: 0.05  # Significance level for clustering
   pen_weight: 1.0
   temp_init: 1.0
-  cool_rate: 0.5
-  outer_iter: 3  # Number of outer iterations
+  cool_rate: 0.99
+  decay_rate: 0.99
+  outer_iter: 1  # Number of outer iterations
   inner_iter_max: 1000  # Maximum number of inner iterations
-  thresh: 0.01  # Minimum size of core relative to network (recursive only)
-  perturb_scalar: 2
+  thresh: 5  # Minimum size of core
