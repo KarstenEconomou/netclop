@@ -17,10 +17,10 @@ bootstrap:
 sig_clu:
   <<: *defaults
   sig: 0.05  # Significance level for clustering
-  pen_weight: 1.0
-  temp_init: 1.0
-  cool_rate: 0.99
-  decay_rate: 0.99
-  outer_iter: 1  # Number of outer iterations
-  inner_iter_max: 1000  # Maximum number of inner iterations
+  pen_scalar: 1.0
+  temp_init: 10.0
+  cool_rate: 0.9
+  decay_rate: 1.0
+  loops: 10
+  max_sweeps: 1000
   thresh: 5  # Minimum size of core

@@ -365,7 +365,7 @@ class UpSetPlot:
         upset = UpSet(
             data,
             sum_over="count",
-            min_subset_size=0.02,
+            min_subset_size=0.05,
             sort_by="cardinality",
             sort_categories_by="input",
             facecolor="black",

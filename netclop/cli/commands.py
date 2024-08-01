@@ -245,7 +245,7 @@ def rsc(
     help="Output file.",
 )
 @click.pass_context
-def plot_structure(ctx, input_path, output_path, sc_scheme, mute_trivial):
+def plot_structure(ctx, input_path, output_path):
     """Plots structure."""
     gplt = GeoPlot.from_file(input_path)
     gplt.plot_structure()
