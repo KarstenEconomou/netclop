@@ -298,11 +298,11 @@ class UpSetPlot:
     cores: list[set[Node]]
     nets: list[nx.DiGraph]
     parts: list[Partition]
+    sig: float
 
-    def count_coalescence(self) -> tuple[dict[tuple[int, ...], int], dict[tuple[int, ...], float]]:
+    def count_coalescence(self) -> dict[tuple[int, ...], int]:
         """Counts coalescence of cores across partitions."""
         counts = collections.defaultdict(int)
-        coherences = collections.defaultdict(list)
 
         for net, part in zip(self.nets, self.parts):
             prev_supcores = []
@@ -319,10 +319,9 @@ class UpSetPlot:
                         if not any(supcore_key.issubset(prev) for prev in prev_supcores):
                             prev_supcores.append(supcore_key)  # Save assignment
                             counts[supcore_key] += 1
-                            coherences[supcore_key].append(self.calculate_coherence(net, supcore))
-        return counts, coherences
+        return counts
 
-    def prep_data(self, counts: dict[tuple[int, ...], int], coherences: dict[tuple[int, ...], float]) -> pd.DataFrame:
+    def prep_data(self, counts: dict[tuple[int, ...], int]) -> pd.DataFrame:
         """Generates multi-index series from coalescence count data."""
         bools = list(itertools.product([True, False], repeat=len(self.cores)))
         labels = list(range(len(self.cores)))
@@ -333,28 +332,24 @@ class UpSetPlot:
 
         for key, count in counts.items():
             condition = pd.Series([True] * len(data), index=data.index)
-            coh = coherences.get(key, [])
 
             for label in labels:
                 if label in key:
                     condition &= data.index.get_level_values(label)
                 else:
                     condition &= ~data.index.get_level_values(label)
-            data[condition] = count / (len(self.parts) * len(coh))
-            for idx in data[condition].index:
-                coherence[idx] = frozenset(coh)
+            data[condition] = count / len(self.parts)
 
-        df = pd.DataFrame({'count': data, 'coherence': coherence})
+        df = pd.DataFrame({'count': data})
 
         def sort_key(index_tuple):
             true_count = sum(index_tuple)
             order = [i for i, val in enumerate(index_tuple) if val]
-            return (true_count, order)
+            return true_count, order
 
         sorted_index = sorted(df.index, key=sort_key)
         df = df.reindex(sorted_index)
 
-        df = df.explode("coherence")
         df.index = pd.MultiIndex.from_tuples(df.index, names=labels)
 
         return df
@@ -365,7 +360,7 @@ class UpSetPlot:
         upset = UpSet(
             data,
             sum_over="count",
-            min_subset_size=0.05,
+            min_subset_size=self.sig,
             sort_by="cardinality",
             sort_categories_by="input",
             facecolor="black",
@@ -374,18 +369,16 @@ class UpSetPlot:
             totals_plot_elements=2,
         )
 
-        upset.add_catplot(kind="strip", value="coherence", color="black", size=0.9)
-
         # Color shading by core
         colors = ["#636EFA", "#EF553B", "#00CC96", "#FFA15A", "#AB63FA",
                   "#19D3F3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"]
         colors = [color.lstrip("#") for color in colors]
-        colors = [tuple(int(color[i:i + 2], 16) / 255 for i in (0, 2, 4)) + (0.2,) for color in colors]
+        colors = [tuple(int(color[i:i + 2], 16) / 255 for i in (0, 2, 4)) + (0.5,) for color in colors]
         for label, color in zip(data.index.names, colors):
             upset.style_categories([label], shading_facecolor=color)
 
         # Setup fig and ax
-        fig = plt.figure(figsize=(3.375, 3.375), dpi=DPI)
+        fig = plt.figure(figsize=(3.375, 3.375), dpi=900)
         ax = upset.plot(fig=fig)
 
         grid_linewidth = 0.25
@@ -393,12 +386,12 @@ class UpSetPlot:
 
         # Intersections
         ax["intersections"].set_ylabel("Coalescence frequency")
-        ax["intersections"].axhline(y=0.95, color="gray", linestyle='--', linewidth=grid_linewidth)
+        ax["intersections"].axhline(y=(1-self.sig), color="gray", linestyle='--', linewidth=grid_linewidth)
+        ax["intersections"].axhline(y=self.sig, color="gray", linestyle='--', linewidth=grid_linewidth)
         ax["intersections"].set_ylim(0.0, 1.0)
         ax["intersections"].grid(linewidth=grid_linewidth)
         ax["intersections"].yaxis.set_tick_params(width=tick_linewidth)
         ax["intersections"].spines["left"].set_linewidth(tick_linewidth)
-        ax["intersections"].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
         # Relabel cores from 1
         current_labels = [int(label.get_text()) for label in ax["matrix"].get_yticklabels()]
@@ -407,27 +400,17 @@ class UpSetPlot:
 
         # Totals
         ax["totals"].set_xlabel("Stability")
-        ax["totals"].set_xlim(1.00, 0.95)
+        ax["totals"].set_xlim(1.00, 1 - self.sig)
         ax["totals"].xaxis.set_tick_params(width=tick_linewidth)
         ax["totals"].spines["bottom"].set_linewidth(tick_linewidth)
         ax["totals"].grid(linewidth=grid_linewidth)
 
-        # Dist
-        ax["extra1"].set_ylabel("Coherence")
-        ax["extra1"].set_ylim(top=1.0)
-        # ax["extra1"].set_yticks([0.5, 0.8, 0.9, 1.0])
-        ax["extra1"].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
-        ax["extra1"].grid(linewidth=grid_linewidth)
-        ax["extra1"].yaxis.set_tick_params(width=tick_linewidth)
-        ax["extra1"].spines["left"].set_linewidth(tick_linewidth)
-
-        # plt.show()
         plt.savefig(path, bbox_inches="tight")
 
     def save(self, path: Path):
         """Produce plot."""
-        counts, coherences = self.count_coalescence()
-        data = self.prep_data(counts, coherences)
+        counts = self.count_coalescence()
+        data = self.prep_data(counts)
         self.plot(data, path)
 
     @staticmethod

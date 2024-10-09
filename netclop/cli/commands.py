@@ -124,6 +124,14 @@ def construct(ctx, input_path, output_path, res):
     help="PRNG seed for community detection.",
 )
 @click.option(
+    "--sig",
+    "sig",
+    type=click.FloatRange(min=0, max=1, min_open=True, max_open=True),
+    show_default=True,
+    default=DEF_CFG["sig_clu"]["sig"],
+    help="Significance level for significance clustering.",
+)
+@click.option(
     "--cooling-rate",
     "-cr",
     "cool_rate",
@@ -131,6 +139,14 @@ def construct(ctx, input_path, output_path, res):
     show_default=True,
     default=DEF_CFG["sig_clu"]["cool_rate"],
     help="Cooling rate in simulated annealing.",
+)
+@click.option(
+    "--size-thresh",
+    "thresh",
+    type=click.IntRange(min=1),
+    show_default=True,
+    default=DEF_CFG["sig_clu"]["thresh"],
+    help="Minimum core size.",
 )
 @click.pass_context
 def rsc(
@@ -143,7 +159,9 @@ def rsc(
     variable_markov_time,
     num_trials,
     seed,
+    sig,
     cool_rate,
+    thresh,
 ):
     """Community detection and significance clustering."""
     input_path = Path(input_path)
@@ -169,6 +187,8 @@ def rsc(
         "sig_clu": {
             "cool_rate": cool_rate,
             "seed": seed,
+            "sig": sig,
+            "thresh": thresh,
         },
     }
     update_config(ctx.obj["cfg"], updated_cfg)
@@ -225,7 +245,7 @@ def rsc(
     gplt.plot_structure()
     gplt.save(output_dir / f"{filename}_plt.png")
 
-    usplt = UpSetPlot(cores, nets, parts)
+    usplt = UpSetPlot(cores, nets, parts, sig)
     usplt.save(output_dir / f"{filename}_upset.png")
 
     gui.footer()

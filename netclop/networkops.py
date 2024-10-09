@@ -222,7 +222,7 @@ class NetworkOps:
         modular_desc = node_info.set_index("node").to_dict(orient="index")
         nx.set_node_attributes(net, modular_desc)
 
-    def make_bootstrap_ensemble(self, net: nx.DiGraph) -> tuple[nx.DiGraph, ...]:
+    def make_bootstrap_ensemble(self, net: nx.DiGraph) -> list[nx.DiGraph]:
         """Resample edge weights."""
         edges, weights = zip(*nx.get_edge_attributes(net, 'weight').items())
         weights = np.array(weights)

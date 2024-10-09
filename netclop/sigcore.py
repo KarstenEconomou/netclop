@@ -29,7 +29,7 @@ class SigClu:
         cores = []
 
         # Initialize
-        avail_nodes = self.nodes
+        avail_nodes = self.nodes.copy()
 
         # Loop to find each core above min size threshold
         while True:
