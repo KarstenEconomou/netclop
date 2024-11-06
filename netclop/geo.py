@@ -1,41 +1,76 @@
 """Defines the GeoPlot and UpsetPlot class."""
-import collections
-import dataclasses
-import itertools
-import json
-import typing
+from dataclasses import dataclass
+from json import loads
+from os import PathLike
+from typing import Self, Sequence
 
 import geopandas as gpd
 import h3.api.numpy_int as h3
-import matplotlib.pyplot as plt
 import networkx as nx
 import pandas as pd
 import plotly.graph_objects as go
 import shapely
-from matplotlib.ticker import FormatStrFormatter
-from upsetplot import UpSet
 
-from .constants import Node, Partition, Path
+from .constants import Node, Partition, COLORS
 
-DPI = 900
 
-@dataclasses.dataclass
+class GeoNet:
+    @dataclass(frozen=True)
+    class Config:
+        res: int = 5
+
+    type Cell = int
+
+    def __init__(self, **config_options):
+        self.cfg = self.Config(**config_options)
+
+    def bin_positions(self, lngs: Sequence[float], lats: Sequence[float]) -> list[Cell]:
+        """Bin (lng, lat) coordinate pairs into an H3 cell."""
+        return [h3.latlng_to_cell(lat, lng, self.cfg.res) for lat, lng in zip(lats, lngs)]
+
+    def make_lpt_edges(self, path: PathLike) -> tuple[tuple[Cell, Cell], ...]:
+        """Make an edge list (with duplicates) from LPT positions."""
+        data = pd.read_csv(
+            path,
+            names=["initial_lng", "initial_lat", "final_lng", "final_lat"],
+            index_col=False,
+            comment="#",
+        )
+
+        srcs = self.bin_positions(data["initial_lng"], data["initial_lat"])
+        tgts = self.bin_positions(data["final_lng"], data["final_lat"])
+        return tuple(zip(srcs, tgts))
+
+    def net_from_lpt(self, path: PathLike) -> nx.DiGraph:
+        """Construct a network from LPT positions."""
+        net = nx.DiGraph()
+        edges = self.make_lpt_edges(path)
+
+        for src, tgt in edges:
+            if net.has_edge(src, tgt):
+                # Record another transition along a recorded edge
+                net[src][tgt]["weight"] += 1
+            else:
+                # Record a new edge
+                net.add_edge(src, tgt, weight=1)
+
+        nx.relabel_nodes(net, dict((name, str(name)) for name in net.nodes), copy=False)
+        return net
+
+
 class GeoPlot:
     """Geospatial plotting."""
-    gdf: gpd.GeoDataFrame
-    fig: go.Figure = dataclasses.field(init=False)
-    geojson: dict = dataclasses.field(init=False)
-
-    def __post_init__(self):
-        self._format_gdf()
-        self.geojson = json.loads(self.gdf.to_json())
+    def __init__(self, gdf: gpd.GeoDataFrame):
+        self.gdf = gdf
+        self.geojson = loads(self.gdf.to_json())
         self.fig = go.Figure()
 
-    def save(self, path) -> None:
+    def save(self, path: PathLike) -> None:
         """Saves figure to static image."""
         width = 5  # inches
         height = 3  # inches
-        self.fig.write_image(path, height=height * DPI, width=width * DPI, scale=1)
+        dpi = 900
+        self.fig.write_image(path, height=height * dpi, width=width * dpi, scale=1)
 
     def show(self) -> None:
         """Shows plot."""
@@ -122,12 +157,6 @@ class GeoPlot:
 
         self._set_layout()
 
-    def _format_gdf(self) -> None:
-        """Formats gdf column types."""
-        gdf = self.gdf
-        gdf["module"] = gdf["module"].astype(str)
-        # gdf["node"] = gdf["node"].astype(int).apply(hex)
-
     def _get_traces(
         self,
         gdf: gpd.GeoDataFrame,
@@ -160,7 +189,7 @@ class GeoPlot:
             self.fig.add_trace(go.Choropleth(
                 geojson=self.geojson,
                 locations=trace_gdf.index,
-                z=trace_gdf["module"],
+                z=trace_gdf["core"],
                 name=label,
                 legendgroup=label,
                 showlegend=legend,
@@ -214,21 +243,10 @@ class GeoPlot:
     def _color_cores(self) -> None:
         """Assigns colors to cores."""
         gdf = self.gdf
-        gdf["module"] = gdf["module"].astype(str)
+        # gdf["module"] = gdf["module"].astype(str)
 
         noise_color = "#CCCCCC"
-        colors = {  # Core index zero reserved for noise
-            "1": "#636EFA",
-            "2": "#EF553B",
-            "3": "#00CC96",
-            "4": "#FFA15A",
-            "5": "#AB63FA",
-            "6": "#19D3F3",
-            "7": "#FF6692",
-            "8": "#B6E880",
-            "9": "#FF97FF",
-            "10": "#FECB52",
-        }
+        colors = dict((str(i), color) for i, color in enumerate(COLORS, 1))
 
         n_colors = len(colors)
         gdf["color"] = gdf.apply(
@@ -241,19 +259,27 @@ class GeoPlot:
         self.gdf = gdf
 
     @classmethod
-    def from_file(cls, path: Path) -> typing.Self:
-        """Make GeoDataFrame from file."""
+    def from_partition(cls, nodes: set[Node], partition: Partition):
+        core_nodes = [(node, i) for i, core in enumerate(partition, 1) for node in core]
+        core_nodes.extend([(node, 0) for node in nodes.difference(set().union(*partition))])
+
+        df = pd.DataFrame(core_nodes, columns=["node", "core"])
+        return cls.from_dataframe(df)
+
+    @classmethod
+    def from_file(cls, path: PathLike) -> Self:
+        """Make class instance from a file."""
         df = pd.read_csv(path)
         return cls.from_dataframe(df)
 
     @classmethod
-    def from_dataframe(cls, df: pd.DataFrame) -> typing.Self:
-        """Make GeoDataFrame from DataFrame"""
+    def from_dataframe(cls, df: pd.DataFrame) -> Self:
+        """Make class instance from a pd.DataFrame"""
         gdf = gpd.GeoDataFrame(df, geometry=cls._geo_from_cells(df["node"].values))
         return cls(gdf)
 
     @staticmethod
-    def _geo_from_cells(cells: typing.Sequence[str]) -> list[shapely.Polygon]:
+    def _geo_from_cells(cells: Sequence[str]) -> list[shapely.Polygon]:
         """Get GeoJSON geometries from H3 cells."""
         return [
             shapely.Polygon(
@@ -292,139 +318,3 @@ class GeoPlot:
     def _filter_to_col_entry(gdf: gpd.GeoDataFrame, col: str, entry) -> gpd.GeoDataFrame:
         """Get subset of gdf with column equal to a certain entry."""
         return gdf[gdf[col] == entry]
-
-@dataclasses.dataclass
-class UpSetPlot:
-    cores: list[set[Node]]
-    nets: list[nx.DiGraph]
-    parts: list[Partition]
-    sig: float
-
-    def count_coalescence(self) -> dict[tuple[int, ...], int]:
-        """Counts coalescence of cores across partitions."""
-        counts = collections.defaultdict(int)
-
-        for net, part in zip(self.nets, self.parts):
-            prev_supcores = []
-            for r in range(len(self.cores), 0, -1):
-                for comb in itertools.combinations(enumerate(self.cores), r):
-                    indices, sets = zip(*comb)
-
-                    supcore = frozenset().union(*sets)  # Flatten cores to super-core
-                    supcore_key = frozenset(indices)  # Key to identify super-core
-
-                    # Check if mutually assigned
-                    if any(supcore.issubset(module) for module in part):
-                        # Check if comb is subset of a larger combination already counted
-                        if not any(supcore_key.issubset(prev) for prev in prev_supcores):
-                            prev_supcores.append(supcore_key)  # Save assignment
-                            counts[supcore_key] += 1
-        return counts
-
-    def prep_data(self, counts: dict[tuple[int, ...], int]) -> pd.DataFrame:
-        """Generates multi-index series from coalescence count data."""
-        bools = list(itertools.product([True, False], repeat=len(self.cores)))
-        labels = list(range(len(self.cores)))
-
-        multi_index = pd.MultiIndex.from_tuples(bools, names=labels)
-        data = pd.Series(0.0, index=multi_index)
-        coherence = pd.Series([[] for _ in range(len(data))], index=multi_index)
-
-        for key, count in counts.items():
-            condition = pd.Series([True] * len(data), index=data.index)
-
-            for label in labels:
-                if label in key:
-                    condition &= data.index.get_level_values(label)
-                else:
-                    condition &= ~data.index.get_level_values(label)
-            data[condition] = count / len(self.parts)
-
-        df = pd.DataFrame({'count': data})
-
-        def sort_key(index_tuple):
-            true_count = sum(index_tuple)
-            order = [i for i, val in enumerate(index_tuple) if val]
-            return true_count, order
-
-        sorted_index = sorted(df.index, key=sort_key)
-        df = df.reindex(sorted_index)
-
-        df.index = pd.MultiIndex.from_tuples(df.index, names=labels)
-
-        return df
-
-    def plot(self, data: pd.DataFrame, path: Path) -> None:
-        """Make UpSet plot."""
-        plt.rc("font", family="Arial", size=10)
-        upset = UpSet(
-            data,
-            sum_over="count",
-            min_subset_size=self.sig,
-            sort_by="cardinality",
-            sort_categories_by="input",
-            facecolor="black",
-            shading_color=0.0,
-            intersection_plot_elements=5,
-            totals_plot_elements=2,
-        )
-
-        # Color shading by core
-        colors = ["#636EFA", "#EF553B", "#00CC96", "#FFA15A", "#AB63FA",
-                  "#19D3F3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"]
-        colors = [color.lstrip("#") for color in colors]
-        colors = [tuple(int(color[i:i + 2], 16) / 255 for i in (0, 2, 4)) + (0.5,) for color in colors]
-        for label, color in zip(data.index.names, colors):
-            upset.style_categories([label], shading_facecolor=color)
-
-        # Setup fig and ax
-        fig = plt.figure(figsize=(3.375, 3.375), dpi=900)
-        ax = upset.plot(fig=fig)
-
-        grid_linewidth = 0.25
-        tick_linewidth = 0.5
-
-        # Intersections
-        ax["intersections"].set_ylabel("Coalescence frequency")
-        ax["intersections"].axhline(y=(1-self.sig), color="gray", linestyle='--', linewidth=grid_linewidth)
-        ax["intersections"].axhline(y=self.sig, color="gray", linestyle='--', linewidth=grid_linewidth)
-        ax["intersections"].set_ylim(0.0, 1.0)
-        ax["intersections"].grid(linewidth=grid_linewidth)
-        ax["intersections"].yaxis.set_tick_params(width=tick_linewidth)
-        ax["intersections"].spines["left"].set_linewidth(tick_linewidth)
-
-        # Relabel cores from 1
-        current_labels = [int(label.get_text()) for label in ax["matrix"].get_yticklabels()]
-        new_labels = [str(label + 1) for label in current_labels]
-        ax["matrix"].set_yticklabels(new_labels)
-
-        # Totals
-        ax["totals"].set_xlabel("Stability")
-        ax["totals"].set_xlim(1.00, 1 - self.sig)
-        ax["totals"].xaxis.set_tick_params(width=tick_linewidth)
-        ax["totals"].spines["bottom"].set_linewidth(tick_linewidth)
-        ax["totals"].grid(linewidth=grid_linewidth)
-
-        plt.savefig(path, bbox_inches="tight")
-
-    def save(self, path: Path):
-        """Produce plot."""
-        counts = self.count_coalescence()
-        data = self.prep_data(counts)
-        self.plot(data, path)
-
-    @staticmethod
-    def calculate_coherence(net: nx.DiGraph, nodes: set | frozenset) -> float:
-        """Calculates the coherence ratio of a subset of nodes."""
-        int_wgt, ext_wgt = 0, 0
-
-        for src in nodes:
-            for _, tgt, wgt in net.out_edges(src, data="weight"):
-                if tgt in nodes:
-                    int_wgt += wgt
-                else:
-                    ext_wgt += wgt
-
-        if int_wgt == 0:
-            return 0.0
-        return int_wgt / (int_wgt + ext_wgt)

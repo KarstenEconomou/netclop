@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "netclop"
-version = "1.2.0"
-description = "Network clustering operations for geophysical fluid transport"
-authors = ["KarstenEconomou <economoukarsten@gmail.com>"]
+version = "2.0.0"
+description = "Network clustering operations (for geophysical fluid transport)"
+authors = ["KarstenEconomou <KarstenEconomou@dal.ca>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
