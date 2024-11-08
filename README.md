@@ -41,7 +41,7 @@ Significance clustering can be run on a `networkx.Graph` object directly, which 
 from netclop import NetworkEnsemble
 ne = NetworkEnsemble(net, **ne_config)
 ne.partition()
-ne.sigclu(**kwargs)
+ne.sigclu(**sc_config)
 cores = ne.cores
 ```
 or on an ensemble of partitions
