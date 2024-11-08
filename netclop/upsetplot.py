@@ -13,6 +13,7 @@ from upsetplot import UpSet
 from .constants import COLORS
 from .typing import Partition
 
+
 class UpSetPlot:
     @dataclass
     class Config:

@@ -12,6 +12,7 @@ from ..constants import SEED
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
+
 @click.command(name="rsc")
 @click.argument(
     "paths",
