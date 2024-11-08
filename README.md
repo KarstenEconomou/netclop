@@ -15,7 +15,8 @@
 * Spatially-embedded network visualization
 
 ## About
-`netclop` was created to facilitate network-theoretic analysis of marine connectivity in support of larval ecology.
+`netclop` was created as a CLI to facilitate network-theoretic analysis of marine connectivity in support of larval ecology.
+It functions as a library to computations on network ensembles.
 Developed at the Department of Engineering Mathematics and Internetworking, Dalhousie University by Karsten N. Economou.
 
 ### Papers

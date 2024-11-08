@@ -109,7 +109,7 @@ class SigClu:
             if score > best_score and pen == 0:
                 best_state, best_score = state, score
 
-        if self._measure_size(best_state) < self.cfg.min_core_size:
+        if best_score < self.cfg.min_core_size:
             # Best state is not of substantial size to be labelled a core
             # Begin exhaustion search to try to find small, but above threshold cores
             if exhaustion_search:
