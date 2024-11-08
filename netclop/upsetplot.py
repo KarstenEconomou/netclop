@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 from upsetplot import UpSet
 
-from .constants import Partition, COLORS
-
+from .constants import COLORS
+from .typing import Partition
 
 class UpSetPlot:
     @dataclass

@@ -8,9 +8,10 @@ import networkx as nx
 import numpy as np
 from infomap import Infomap
 
-from .constants import Partition, SEED
-from .exceptions import MissingResultError
 from .sigclu import SigClu
+from .constants import SEED
+from .exceptions import MissingResultError
+from .typing import Partition
 
 
 class NetworkEnsemble:

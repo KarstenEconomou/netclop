@@ -4,11 +4,11 @@ from pathlib import Path
 
 import click
 
-from ..constants import SEED
+from ..geo import GeoNet, GeoPlot
 from ..networkensemble import NetworkEnsemble
 from ..sigclu import SigClu
-from ..geo import GeoNet, GeoPlot
 from ..upsetplot import UpSetPlot
+from ..constants import SEED
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 

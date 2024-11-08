@@ -1,4 +1,4 @@
-"""Exceptions."""
+"""Defines exceptions."""
 
 
 class MissingResultError(Exception):

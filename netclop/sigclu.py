@@ -7,9 +7,10 @@ from typing import Optional
 
 import numpy as np
 
-from .constants import Node, Partition, SEED
-from .exceptions import MissingResultError
 from .upsetplot import UpSetPlot
+from .constants import SEED
+from .exceptions import MissingResultError
+from .typing import Node, Partition
 
 type Size = int
 Score = namedtuple("Score", ["size", "pen"])

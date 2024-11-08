@@ -11,15 +11,14 @@ import pandas as pd
 import plotly.graph_objects as go
 import shapely
 
-from .constants import Node, Partition, COLORS
+from .constants import COLORS
+from .typing import Cell, Node, Partition
 
 
 class GeoNet:
     @dataclass(frozen=True)
     class Config:
         res: int = 5
-
-    type Cell = int
 
     def __init__(self, **config_options):
         self.cfg = self.Config(**config_options)
