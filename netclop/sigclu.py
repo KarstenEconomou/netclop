@@ -39,7 +39,7 @@ class SigClu:
 
         self.cores: Optional[Partition] = None
 
-    def _log(self, msg: str):
+    def _log(self, msg: str) -> None:
         """Log message."""
         if self.cfg.verbose:
             print(msg)
