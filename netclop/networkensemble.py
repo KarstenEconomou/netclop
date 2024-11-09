@@ -28,8 +28,8 @@ class NetworkEnsemble:
         self.nets = net if isinstance(net, Sequence) else [net]
         self.cfg = self.Config(**config_options)
 
-        self.bootstraps: Optional[Sequence[nx.DiGraph]] = None
-        self.partitions: Optional[Sequence[Partition]] = None
+        self.bootstraps: Optional[list[nx.DiGraph]] = None
+        self.partitions: Optional[list[Partition]] = None
         self.cores: Optional[Partition] = None
 
     @cached_property
