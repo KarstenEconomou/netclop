@@ -11,7 +11,7 @@ from infomap import Infomap
 from .sigclu import SigClu
 from .constants import SEED
 from .exceptions import MissingResultError
-from .typing import Partition
+from .typing import Node, Partition
 
 
 class NetworkEnsemble:
@@ -25,7 +25,7 @@ class NetworkEnsemble:
         im_num_trials: int = 5
 
     def __init__(self, net: nx.DiGraph | list[nx.DiGraph], **config_options):
-        self.net = net if isinstance(net, list) else [net]
+        self.nets = net if isinstance(net, list) else [net]
         self.cfg = self.Config(**config_options)
 
         self.bootstraps: Optional[list[nx.DiGraph]] = None
@@ -33,15 +33,23 @@ class NetworkEnsemble:
         self.cores: Optional[Partition] = None
 
     @cached_property
-    def nodes(self):
-        return set().union(*[net.nodes for net in self.net])
+    def nodes(self) -> set[Node]:
+        return set().union(*[net.nodes for net in self.nets])
+
+    def is_ensemble(self) -> bool:
+        """Check if an ensemble of nets is stored."""
+        return len(self.nets) > 1
+
+    def is_bootstrapped(self) -> bool:
+        """Check if replicate networks have been bootstrapped."""
+        return len(self.bootstraps) == self.cfg.num_bootstraps
 
     def partition(self):
-        if len(self.net) == 1:
-            self.make_bootstrap_ensemble(self.net[0])
+        if self.is_ensemble():
+            self.bootstrap(self.nets[0])
             self.partitions = [self.im_partition(bootstrap) for bootstrap in self.bootstraps]
         else:
-            self.partitions = [self.im_partition(net) for net in self.net]
+            self.partitions = [self.im_partition(net) for net in self.nets]
 
     def im_partition(self, net: nx.DiGraph) -> Partition:
         """Partitions a network."""
@@ -60,7 +68,7 @@ class NetworkEnsemble:
         partition = im.get_dataframe(["name", "module_id"]).groupby("module_id")["name"].apply(set).tolist()
         return partition
 
-    def make_bootstrap_ensemble(self, net: nx.DiGraph) -> None:
+    def bootstrap(self, net: nx.DiGraph) -> None:
         """Resample edge weights."""
         edges, weights = zip(*nx.get_edge_attributes(net, 'weight').items())
         weights = np.array(weights)
@@ -91,6 +99,3 @@ class NetworkEnsemble:
 
         if upset_config is not None:
             sc.upset(**upset_config)
-
-    def _is_bootstrapped(self) -> bool:
-        return len(self.bootstraps) == self.cfg.num_bootstraps
