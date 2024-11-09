@@ -7,11 +7,11 @@ from typing import Optional
 
 import numpy as np
 
-from .upsetplot import UpSetPlot
-from .constants import SEED
-from .exceptions import MissingResultError
-from .netutils import flatten_partition
-from .typing import Node, NodeSet, Partition
+from netclop.constants import SEED
+from netclop.ensemble.netutils import flatten_partition
+from netclop.exceptions import MissingResultError
+from netclop.typing import Node, NodeSet, Partition
+from netclop.ensemble.upsetplot import UpSetPlot
 
 type Size = int
 Score = namedtuple("Score", ["size", "pen"])

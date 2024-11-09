@@ -1,60 +1,16 @@
-"""GeoNet and GeoPlot class."""
-from dataclasses import dataclass
+"""GeoPlot class."""
 from json import loads
 from os import PathLike
-from typing import Self, Sequence
+from typing import Optional, Self, Sequence
 
 import geopandas as gpd
 import h3.api.numpy_int as h3
-import networkx as nx
 import pandas as pd
 import plotly.graph_objects as go
 import shapely
 
-from .constants import COLORS, WEIGHT_ATTR
-from .typing import Cell, NodeSet, Partition
-
-
-class GeoNet:
-    @dataclass(frozen=True)
-    class Config:
-        res: int = 5
-
-    def __init__(self, **config_options):
-        self.cfg = self.Config(**config_options)
-
-    def bin_positions(self, lngs: Sequence[float], lats: Sequence[float]) -> list[Cell]:
-        """Bin (lng, lat) coordinate pairs into an H3 cell."""
-        return [h3.latlng_to_cell(lat, lng, self.cfg.res) for lat, lng in zip(lats, lngs)]
-
-    def make_lpt_edges(self, path: PathLike) -> tuple[tuple[Cell, Cell], ...]:
-        """Make an edge list (with duplicates) from LPT positions."""
-        data = pd.read_csv(
-            path,
-            names=["initial_lng", "initial_lat", "final_lng", "final_lat"],
-            index_col=False,
-            comment="#",
-        )
-
-        srcs = self.bin_positions(data["initial_lng"], data["initial_lat"])
-        tgts = self.bin_positions(data["final_lng"], data["final_lat"])
-        return tuple(zip(srcs, tgts))
-
-    def net_from_lpt(self, path: PathLike) -> nx.DiGraph:
-        """Construct a network from LPT positions."""
-        net = nx.DiGraph()
-        edges = self.make_lpt_edges(path)
-
-        for src, tgt in edges:
-            if net.has_edge(src, tgt):
-                # Record another transition along a recorded edge
-                net[src][tgt][WEIGHT_ATTR] += 1
-            else:
-                # Record a new edge
-                net.add_edge(src, tgt, weight=1)
-
-        nx.relabel_nodes(net, dict((name, str(name)) for name in net.nodes), copy=False)
-        return net
+from netclop.constants import COLORS
+from netclop.typing import CentralityNodes, NodeSet, Partition
 
 
 class GeoPlot:
@@ -62,106 +18,65 @@ class GeoPlot:
     def __init__(self, gdf: gpd.GeoDataFrame):
         self.gdf = gdf
         self.geojson = loads(self.gdf.to_json())
-        self.fig = go.Figure()
 
-    def save(self, path: PathLike) -> None:
+        self.fig: Optional[go.Figure] = None
+
+    def save(self, path: Optional[PathLike]) -> None:
         """Saves figure to static image."""
-        width = 5  # inches
-        height = 3  # inches
-        dpi = 900
-        self.fig.write_image(path, height=height * dpi, width=width * dpi, scale=1)
+        if path is not None:
+            width = 6.75  # inches
+            height = width / 2 # inches
+            dpi = 900
+            self.fig.write_image(path, height=height * dpi, width=width * dpi, scale=1.0)
 
     def show(self) -> None:
         """Shows plot."""
         self.fig.show()
 
-    def plot_structure(self) -> None:
+    def plot_structure(self, path: Optional[PathLike]=None) -> None:
         """Plots structure."""
-        gdf = self.gdf
+        self.fig = go.Figure()
 
         self._color_cores()
-        for idx, trace_gdf in self._get_traces(gdf, "core"):
-            self._add_trace(trace_gdf, str(idx))
+        for idx, trace_gdf in self._get_traces(self.gdf, "core"):
+            self._add_trace_from_gdf(trace_gdf, str(idx))
 
         self._set_layout()
         self._set_legend()
 
-    def plot_centrality(self) -> None:
+        self.save(path)
+
+    def plot_centrality(
+        self,
+        node_centrality: CentralityNodes,
+        centrality_index: str="Centrality",
+        path: Optional[PathLike] = None,
+    ) -> None:
+        self.fig = go.Figure()
+
         gdf = self.gdf
-        centrality_indices = {
-            "out_deg": "Out-degree",
-            "in_deg": "In-degree",
-            "out_str": "Out-strength",
-            "in_str": "In-strength",
-            "btwn": "Betweenness",
-            "flow": "Flow",
-        }
+        gdf[centrality_index] = gdf["node"].map(node_centrality)
 
-        customdata_columns = ["node", "module"] + list(centrality_indices.keys())
-        customdata = gdf[customdata_columns]
-
-        # Create a list of choropleth traces, one for each centrality index
-        choropleth_traces = []
-        for index, name in centrality_indices.items():
-            hovertemplate_parts = [
-                "<b>Node: </b>%{customdata[0]}",
-                "<b>Module: </b>%{customdata[1]}<br>",
-                "<b>Centrality</b>"
-            ]
-
-            for i, key in enumerate(centrality_indices.keys(), 2):
-                if gdf[key].dtype == 'int':
-                    format_str = f"{centrality_indices[key]}: %{{customdata[{i}]:,d}}"
-                else:
-                    format_str = f"{centrality_indices[key]}: %{{customdata[{i}]:.2e}}"
-                hovertemplate_parts.append(format_str)
-
-            hovertemplate = "<br>".join(hovertemplate_parts) + "<extra></extra>"
-
-            choropleth_traces.append(go.Choropleth(
-                geojson=self.geojson,
-                locations=gdf.index,
-                z=gdf[index],
-                marker={"line": {"width": 0.1, "color": "white"}},
-                showscale=True,
-                colorbar=dict(title=name),
-                colorscale="Viridis",
-                customdata=customdata,
-                hovertemplate=hovertemplate,
-                visible=(index == list(centrality_indices.keys())[0]),
-            ))
-
-        for trace in choropleth_traces:
-            self.fig.add_trace(trace)
-
-        # Create buttons for the dropdown menu
-        buttons = []
-        for i, (index, name) in enumerate(centrality_indices.items()):
-            buttons.append(dict(
-                method="update",
-                label=name,
-                args=[
-                    {"visible": [i == j for j in range(len(centrality_indices))]},
-                    {"coloraxis": {"colorbar": {"title": name}}},
-                ]
-            ))
-
-        self.fig.update_layout(
-            updatemenus=[{
-                "buttons": buttons,
-                "direction": "down",
-                "showactive": True,
-            }],
-        )
+        self.fig.add_trace(go.Choropleth(
+            geojson=self.geojson,
+            locations=gdf.index,
+            z=gdf[centrality_index],
+            marker={"line": {"width": 0.1, "color": "white"}},
+            showscale=True,
+            colorbar=dict(title=centrality_index.capitalize()),
+            colorscale="Viridis",
+        ))
 
         self._set_layout()
+
+        self.save(path)
 
     def _get_traces(
         self,
         gdf: gpd.GeoDataFrame,
         col: str,
     ) -> list[tuple[str | int, gpd.GeoDataFrame]]:
-        """Operation to get all traces and corresponding labels to add to plot."""
+        """Get all traces and corresponding labels to add to plot."""
         traces = []
         trace_idx = self._get_sorted_unique_col(gdf, col)
         for idx in trace_idx:
@@ -169,18 +84,15 @@ class GeoPlot:
             traces.append((idx, trace_gdf))
         return traces
 
-    def _add_trace(
+    def _add_trace_from_gdf(
         self,
         trace_gdf: gpd.GeoDataFrame,
         label: str,
         legend: bool=True,
-        mute_trivial: bool=False,
     ) -> None:
-        """Adds trace to plot."""
+        """Add trace to plot froma gpd.GeoDataFrame."""
         if not trace_gdf.empty:
             color = trace_gdf["color"].unique().item()
-            if legend and mute_trivial and len(trace_gdf) == 1:
-                legend = False
 
             if label == "0":
                 label = "Noise"
@@ -215,12 +127,12 @@ class GeoPlot:
                 "showlakes": False,
                 "showcountries": True,
             },
-            margin={"r": 2, "t": 2, "l": 2, "b": 2},
             hoverlabel={
                 "bgcolor": "rgba(255, 255, 255, 0.8)",
                 "font_size": 12,
                 "font_family": "Arial",
             },
+            margin={"r": 2, "t": 2, "l": 2, "b": 2},
         )
 
     def _set_legend(self) -> None:
@@ -240,27 +152,24 @@ class GeoPlot:
         )
 
     def _color_cores(self) -> None:
-        """Assigns colors to cores."""
-        gdf = self.gdf
-        # gdf["module"] = gdf["module"].astype(str)
-
+        """Assign colors to cores."""
         noise_color = "#CCCCCC"
         colors = dict((str(i), color) for i, color in enumerate(COLORS, 1))
 
         n_colors = len(colors)
-        gdf["color"] = gdf.apply(
+        self.gdf["color"] = self.gdf.apply(
             lambda node: colors[str((int(node["core"]) - 1) % n_colors + 1)]
             if node["core"]
             else noise_color,
             axis=1
         )
 
-        self.gdf = gdf
-
     @classmethod
-    def from_partition(cls, nodes: NodeSet, partition: Partition) -> Self:
-        core_nodes = [(node, i) for i, core in enumerate(partition, 1) for node in core]
-        core_nodes.extend([(node, 0) for node in nodes.difference(set().union(*partition))])
+    def from_cores(cls, cores: Partition, noise_nodes: Optional[NodeSet]=None) -> Self:
+        """Make class instance from a set of cores."""
+        core_nodes = [(node, i) for i, core in enumerate(cores, 1) for node in core]
+        if noise_nodes is not None:
+            core_nodes.extend([(node, 0) for node in noise_nodes])
 
         df = pd.DataFrame(core_nodes, columns=["node", "core"])
         return cls.from_dataframe(df)

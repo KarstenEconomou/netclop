@@ -1,7 +1,7 @@
 """Network utility functions."""
 from typing import Sequence
 
-from .typing import NodeSet, Partition
+from netclop.typing import NodeSet, Partition
 
 
 def flatten_partition(partition: Partition | Sequence[Partition]) -> NodeSet:

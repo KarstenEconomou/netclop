@@ -1,8 +1,8 @@
 """Node centrality computations."""
 import networkx as nx
 
-from .constants import WEIGHT_ATTR
-from .typing import CentralityNodes
+from netclop.constants import WEIGHT_ATTR
+from netclop.typing import CentralityNodes
 
 
 def out_strength(net: nx.DiGraph, **kwargs) -> CentralityNodes:

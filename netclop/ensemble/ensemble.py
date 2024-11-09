@@ -4,20 +4,19 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import Optional, Sequence
 
-import networkx as nx
 import numpy as np
 from infomap import Infomap
 
-from .sigclu import SigClu
-from .constants import SEED
-from .exceptions import MissingResultError
-from .netutils import flatten_partition
-from .nodecentrality import *
-from .typing import Node, NodeSet, Partition
+from netclop.constants import SEED
+from netclop.ensemble.netutils import flatten_partition
+from netclop.ensemble.centrality import *
+from netclop.ensemble.sigclu import SigClu
+from netclop.exceptions import MissingResultError
+from netclop.typing import NodeSet, Partition
 
 
 class NetworkEnsemble:
-    """Network operations for creating an ensemble of partitions."""
+    """Network operations involving an ensemble of networks."""
     @dataclass(frozen=True)
     class Config:
         seed: int = SEED
@@ -112,12 +111,12 @@ class NetworkEnsemble:
     def node_centrality(self, centrality_index: str, use_bootstraps: bool=False, **kwargs) -> CentralityNodes:
         """Compute node centrality indices."""
         centrality_functions = {
-            "out_degree": nx.out_degree_centrality,
-            "in_degree": nx.in_degree_centrality,
+            "out-degree": nx.out_degree_centrality,
+            "in-degree": nx.in_degree_centrality,
+            "out-strength": out_strength,
+            "in-strength": in_strength,
             "betweenness": nx.betweenness_centrality,
             "pagerank": nx.pagerank,
-            "out_strength": out_strength,
-            "in_strength": in_strength,
         }
         if not (centrality_func := centrality_functions.get(centrality_index.lower())):
             raise ValueError(f"Unknown centrality index: {centrality_index}")

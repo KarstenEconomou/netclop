@@ -10,11 +10,12 @@ import numpy as np
 import pandas as pd
 from upsetplot import UpSet
 
-from .constants import COLORS
-from .typing import Partition
+from netclop.constants import COLORS
+from netclop.typing import Partition
 
 
 class UpSetPlot:
+    """Class for constructing an UpSet plot."""
     @dataclass
     class Config:
         plot_stability: bool = True
