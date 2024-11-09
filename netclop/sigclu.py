@@ -1,4 +1,4 @@
-"""Defines the SigClu class."""
+"""SigClu class."""
 from collections import namedtuple
 from dataclasses import dataclass
 from functools import cached_property
@@ -10,6 +10,7 @@ import numpy as np
 from .upsetplot import UpSetPlot
 from .constants import SEED
 from .exceptions import MissingResultError
+from .netutils import flatten_partition
 from .typing import Node, Partition
 
 type Size = int
@@ -41,12 +42,11 @@ class SigClu:
 
     def _log(self, msg: str) -> None:
         """Log message."""
-        if self.cfg.verbose:
-            print(msg)
+        if self.cfg.verbose: print(msg)
 
     @cached_property
-    def nodes(self) -> set[Node]:
-        return set().union(*[node for partition in self.partitions for node in partition])
+    def nodes(self) -> frozenset[Node]:
+        return flatten_partition(self.partitions)
 
     @cached_property
     def n_pen(self) -> int:
@@ -58,7 +58,7 @@ class SigClu:
         cores = []
 
         # Loop to find each core above min size threshold
-        avail_nodes = self.nodes.copy()
+        avail_nodes = set(self.nodes)
         while True:
             if len(avail_nodes) < self.cfg.min_core_size:
                 break

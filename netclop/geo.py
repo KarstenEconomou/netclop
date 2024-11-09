@@ -1,4 +1,4 @@
-"""Defines the GeoPlot and UpsetPlot class."""
+"""GeoNet and GeoPlot class."""
 from dataclasses import dataclass
 from json import loads
 from os import PathLike

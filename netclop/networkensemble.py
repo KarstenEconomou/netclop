@@ -1,8 +1,7 @@
-"""Defines the NetworkEnsemble class."""
+"""NetworkEnsemble class."""
 from dataclasses import dataclass
 from functools import cached_property
-from os import PathLike
-from typing import Optional
+from typing import Optional, Sequence
 
 import networkx as nx
 import numpy as np
@@ -11,6 +10,7 @@ from infomap import Infomap
 from .sigclu import SigClu
 from .constants import SEED
 from .exceptions import MissingResultError
+from .netutils import flatten_partition
 from .typing import Node, Partition
 
 
@@ -24,8 +24,8 @@ class NetworkEnsemble:
         im_variable_markov_time: bool = True
         im_num_trials: int = 5
 
-    def __init__(self, net: nx.DiGraph | list[nx.DiGraph], **config_options):
-        self.nets = net if isinstance(net, list) else [net]
+    def __init__(self, net: nx.DiGraph | Sequence[nx.DiGraph], **config_options):
+        self.nets = net if isinstance(net, Sequence) else [net]
         self.cfg = self.Config(**config_options)
 
         self.bootstraps: Optional[list[nx.DiGraph]] = None
@@ -33,8 +33,14 @@ class NetworkEnsemble:
         self.cores: Optional[Partition] = None
 
     @cached_property
-    def nodes(self) -> set[Node]:
-        return set().union(*[net.nodes for net in self.nets])
+    def nodes(self) -> frozenset[Node]:
+        return frozenset().union(*[net.nodes for net in self.nets])
+
+    @cached_property
+    def unstable_nodes(self) -> frozenset[Node]:
+        if self.cores is None:
+            raise MissingResultError()
+        return self.nodes.difference(flatten_partition(self.cores))
 
     def is_ensemble(self) -> bool:
         """Check if an ensemble of nets is stored."""
@@ -44,12 +50,13 @@ class NetworkEnsemble:
         """Check if replicate networks have been bootstrapped."""
         return len(self.bootstraps) == self.cfg.num_bootstraps
 
-    def partition(self):
+    def partition(self) -> None:
+        """Partition networks."""
         if self.is_ensemble():
+            self.partitions = [self.im_partition(net) for net in self.nets]
+        else:
             self.bootstrap(self.nets[0])
             self.partitions = [self.im_partition(bootstrap) for bootstrap in self.bootstraps]
-        else:
-            self.partitions = [self.im_partition(net) for net in self.nets]
 
     def im_partition(self, net: nx.DiGraph) -> Partition:
         """Partitions a network."""

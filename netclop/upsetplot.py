@@ -1,4 +1,4 @@
-"""Defines the UpSetPlot class."""
+"""UpSetPlot class."""
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import cached_property
