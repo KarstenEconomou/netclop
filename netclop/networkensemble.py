@@ -126,13 +126,13 @@ class NetworkEnsemble:
             raise MissingResultError()
 
         if self.is_ensemble() or use_bootstraps:
-            node_centralities = []
+            centrality_list: list[CentralityNodes] = []
 
             nets = self.nets if not use_bootstraps else self.bootstraps
             for net in nets:
-                node_centralities.append(centrality_func(net, **kwargs))
+                centrality_list.append(centrality_func(net, **kwargs))
 
-            return self.avg_node_centrality(node_centralities)
+            return self.avg_node_centrality(centrality_list)
         else:
             return centrality_func(self.nets[0], **kwargs)
 
