@@ -11,7 +11,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import shapely
 
-from .constants import COLORS
+from .constants import COLORS, WEIGHT_ATTR
 from .typing import Cell, NodeSet, Partition
 
 
@@ -48,7 +48,7 @@ class GeoNet:
         for src, tgt in edges:
             if net.has_edge(src, tgt):
                 # Record another transition along a recorded edge
-                net[src][tgt]["weight"] += 1
+                net[src][tgt][WEIGHT_ATTR] += 1
             else:
                 # Record a new edge
                 net.add_edge(src, tgt, weight=1)

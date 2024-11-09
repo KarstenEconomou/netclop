@@ -127,7 +127,6 @@ def rsc(
         im_variable_markov_time=variable_markov_time,
         im_num_trials=num_trials,
     )
-    ne.partition()
 
     ne.sigclu(
         seed=seed,

@@ -1,4 +1,5 @@
 """NetworkEnsemble class."""
+from collections import defaultdict
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Optional, Sequence
@@ -11,6 +12,7 @@ from .sigclu import SigClu
 from .constants import SEED
 from .exceptions import MissingResultError
 from .netutils import flatten_partition
+from .nodecentrality import *
 from .typing import Node, NodeSet, Partition
 
 
@@ -95,7 +97,7 @@ class NetworkEnsemble:
     def sigclu(self, upset_config: dict=None, **kwargs) -> None:
         """Computes recursive significance clustering on partition ensemble."""
         if self.partitions is None:
-            raise MissingResultError()
+            self.partition()
 
         sc = SigClu(
             self.partitions,
@@ -106,3 +108,46 @@ class NetworkEnsemble:
 
         if upset_config is not None:
             sc.upset(**upset_config)
+
+    def node_centrality(self, centrality_index: str, use_bootstraps: bool=False, **kwargs) -> dict[Node, float]:
+        """Compute node centrality indices."""
+        centrality_functions = {
+            "out_degree": nx.out_degree_centrality,
+            "in_degree": nx.in_degree_centrality,
+            "betweenness": nx.betweenness_centrality,
+            "pagerank": nx.pagerank,
+            "out_strength": out_strength,
+            "in_strength": in_strength,
+        }
+        if not (centrality_func := centrality_functions.get(centrality_index.lower())):
+            raise ValueError(f"Unknown centrality index: {centrality_index}")
+
+        if use_bootstraps and not self.is_bootstrapped():
+            raise MissingResultError()
+
+        if self.is_ensemble() or use_bootstraps:
+            nets = self.nets if not use_bootstraps else self.bootstraps
+
+            node_centralities = []
+            for net in nets:
+                node_centralities.append(centrality_func(net, **kwargs))
+            return self.avg_node_centrality(node_centralities)
+        else:
+            return centrality_func(self.nets[0], **kwargs)
+
+    @staticmethod
+    def avg_node_centrality(node_centralities: list[dict[Node, float]]) -> dict[Node, float]:
+        """Average the centrality index of each node."""
+        centrality_sums = defaultdict(float)
+        node_counts = defaultdict(int)
+
+        # Sum centrality values and count occurrences for each node
+        for centrality_dict in node_centralities:
+            for node, value in centrality_dict.items():
+                centrality_sums[node] += value
+                node_counts[node] += 1
+
+        # Compute average for each node
+        avg_centrality = dict((node, centrality_sums[node] / node_counts[node]) for node in centrality_sums)
+
+        return avg_centrality
