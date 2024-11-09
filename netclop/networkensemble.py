@@ -109,7 +109,7 @@ class NetworkEnsemble:
         if upset_config is not None:
             sc.upset(**upset_config)
 
-    def node_centrality(self, centrality_index: str, use_bootstraps: bool=False, **kwargs) -> dict[Node, float]:
+    def node_centrality(self, centrality_index: str, use_bootstraps: bool=False, **kwargs) -> CentralityNodes:
         """Compute node centrality indices."""
         centrality_functions = {
             "out_degree": nx.out_degree_centrality,
@@ -126,17 +126,18 @@ class NetworkEnsemble:
             raise MissingResultError()
 
         if self.is_ensemble() or use_bootstraps:
-            nets = self.nets if not use_bootstraps else self.bootstraps
-
             node_centralities = []
+
+            nets = self.nets if not use_bootstraps else self.bootstraps
             for net in nets:
                 node_centralities.append(centrality_func(net, **kwargs))
+
             return self.avg_node_centrality(node_centralities)
         else:
             return centrality_func(self.nets[0], **kwargs)
 
     @staticmethod
-    def avg_node_centrality(node_centralities: list[dict[Node, float]]) -> dict[Node, float]:
+    def avg_node_centrality(node_centralities: list[CentralityNodes]) -> CentralityNodes:
         """Average the centrality index of each node."""
         centrality_sums = defaultdict(float)
         node_counts = defaultdict(int)
