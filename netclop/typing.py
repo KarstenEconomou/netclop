@@ -1,4 +1,6 @@
 """Defines types."""
+
 type Cell = int
 type Node = str
-type Partition = list[set[Node]] | list[frozenset[Node]]
+type NodeSet = set[Node] | frozenset[Node]
+type Partition = list[NodeSet]

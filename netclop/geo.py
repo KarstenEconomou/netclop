@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 import shapely
 
 from .constants import COLORS
-from .typing import Cell, Node, Partition
+from .typing import Cell, NodeSet, Partition
 
 
 class GeoNet:
@@ -258,7 +258,7 @@ class GeoPlot:
         self.gdf = gdf
 
     @classmethod
-    def from_partition(cls, nodes: set[Node], partition: Partition):
+    def from_partition(cls, nodes: NodeSet, partition: Partition) -> Self:
         core_nodes = [(node, i) for i, core in enumerate(partition, 1) for node in core]
         core_nodes.extend([(node, 0) for node in nodes.difference(set().union(*partition))])
 

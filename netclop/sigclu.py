@@ -11,7 +11,7 @@ from .upsetplot import UpSetPlot
 from .constants import SEED
 from .exceptions import MissingResultError
 from .netutils import flatten_partition
-from .typing import Node, Partition
+from .typing import Node, NodeSet, Partition
 
 type Size = int
 Score = namedtuple("Score", ["size", "pen"])
@@ -45,7 +45,7 @@ class SigClu:
         if self.cfg.verbose: print(msg)
 
     @cached_property
-    def nodes(self) -> frozenset[Node]:
+    def nodes(self) -> NodeSet:
         return flatten_partition(self.partitions)
 
     @cached_property
@@ -81,7 +81,7 @@ class SigClu:
         upset = UpSetPlot(self.cores, self.partitions, sig=self.cfg.sig, **kwargs)
         upset.plot(path)
 
-    def _add_core(self, core: set[Node], cores: Partition) -> None:
+    def _add_core(self, core: NodeSet, cores: Partition) -> None:
         """Merge a core with a larger core if possible."""
         if len(cores) == 0:
             cores.append(core)
@@ -98,7 +98,7 @@ class SigClu:
         """Manually sort cores from largest to smallest."""
         nodes.sort(key=self._measure_size, reverse=True)
 
-    def _find_core_sanitized(self, nodes: set[Node], exhaustion_search: bool=True) -> Optional[set[Node]]:
+    def _find_core_sanitized(self, nodes: NodeSet, exhaustion_search: bool=True) -> Optional[NodeSet]:
         """Perform simulated annealing with wrapper for restarts."""
         if self._is_trivial(nodes) or self._all_form_core(nodes):
             return nodes
@@ -122,7 +122,7 @@ class SigClu:
 
         return best_state
 
-    def _find_core(self, nodes: set[Node]) -> tuple[set[Node], Score]:
+    def _find_core(self, nodes: NodeSet) -> tuple[NodeSet, Score]:
         """Find the largest core of node set through simulated annealing."""
         pen_weighting = self.cfg.pen_scalar * self._measure_size(nodes)
         nodes = list(nodes)
@@ -161,11 +161,11 @@ class SigClu:
 
         return state, score
 
-    def _measure_size(self, nodes: set[Node]) -> int | float:
+    def _measure_size(self, nodes: NodeSet) -> Size:
         """Calculate a measure of size on a node set."""
         return len(nodes)
 
-    def _score(self, nodes: set[Node], pen_weighting: float) -> Score:
+    def _score(self, nodes: NodeSet, pen_weighting: float) -> Score:
         """Calculate measure of size for node set and penalty across partitions."""
         size = self._measure_size(nodes)
 
@@ -197,24 +197,24 @@ class SigClu:
         """Apply exponential repetition schedule."""
         return np.ceil(n * (self.cfg.decay_rate ** t)).astype(int)
 
-    def _initialize_state(self, nodes: list[Node]) -> set[Node]:
+    def _initialize_state(self, nodes: list[Node]) -> NodeSet:
         """Initialize candidate core."""
         num_init = self.rng.integers(1, len(nodes))
         self.rng.shuffle(nodes)
         return set(nodes[:(num_init - 1)])
 
-    def _all_form_core(self, nodes: set[Node]) -> bool:
+    def _all_form_core(self, nodes: NodeSet) -> bool:
         """Check if every node forms a core."""
         _, pen = self._score(nodes, 1)
         return pen == 0
 
     @staticmethod
-    def _is_trivial(nodes: set[Node]) -> bool:
+    def _is_trivial(nodes: NodeSet) -> bool:
         """Check if a set of nodes are trivial."""
         return len(nodes) <= 1
 
     @staticmethod
-    def _flip(nodes: set[Node], node: Node) -> set[Node]:
+    def _flip(nodes: NodeSet, node: Node) -> NodeSet:
         """Flip membership of a node in a node set."""
         candidate = nodes.copy()
         if node in candidate:
