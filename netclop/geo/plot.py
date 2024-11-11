@@ -22,19 +22,20 @@ class GeoPlot:
         self.fig: Optional[go.Figure] = None
 
     def save(self, path: Optional[PathLike]) -> None:
-        """Saves figure to static image."""
+        """Save figure to static image."""
         if path is not None:
-            width = 6.75  # inches
+            # width = 6.75  # inches
+            width = 3.375
             height = width / 2 # inches
             dpi = 900
-            self.fig.write_image(path, height=height * dpi, width=width * dpi, scale=1.0)
+            self.fig.write_image(path, width=width * dpi, height=height * dpi, scale=1.0)
 
     def show(self) -> None:
-        """Shows plot."""
+        """Show plot."""
         self.fig.show()
 
     def plot_structure(self, path: Optional[PathLike]=None) -> None:
-        """Plots structure."""
+        """Plot structure."""
         self.fig = go.Figure()
 
         self._color_cores()
@@ -52,6 +53,7 @@ class GeoPlot:
         centrality_index: str="Centrality",
         path: Optional[PathLike] = None,
     ) -> None:
+        """Plot centrality index."""
         self.fig = go.Figure()
 
         gdf = self.gdf
@@ -139,13 +141,13 @@ class GeoPlot:
         """Sets figure legend."""
         self.fig.update_layout(
             legend={
-                "font_size": 10,
+                "font_size": 36,
                 "orientation": "h",
                 "yanchor": "top",
-                "y": 0.05,
+                "y": 0.04,
                 "xanchor": "right",
-                "x": 0.98,
-                "title_text": "Core",
+                "x": 0.96,
+                "title_text": "",
                 "itemsizing": "constant",
                 "bgcolor": "rgba(255, 255, 255, 0)",
             },
@@ -182,7 +184,7 @@ class GeoPlot:
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame) -> Self:
-        """Make class instance from a pd.DataFrame"""
+        """Make class instance from a pd.DataFrame."""
         gdf = gpd.GeoDataFrame(df, geometry=cls._geo_from_cells(df["node"].values))
         return cls(gdf)
 
