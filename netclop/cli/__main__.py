@@ -1,7 +1,5 @@
 """Command line interface."""
-import click
-
-from .cli import commands
+from netclop.cli.commands import *
 
 
 @click.group()
@@ -10,4 +8,4 @@ def netclop():
     pass
 
 
-netclop.add_command(commands.rsc)
+netclop.add_command(rsc)

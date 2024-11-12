@@ -1,4 +1,4 @@
-"""Defines the UpSetPlot class."""
+"""UpSetPlot class."""
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import cached_property
@@ -10,15 +10,18 @@ import numpy as np
 import pandas as pd
 from upsetplot import UpSet
 
-from .constants import Partition, COLORS
+from netclop.constants import COLORS
+from netclop.typing import Partition
 
 
 class UpSetPlot:
+    """Class for constructing an UpSet plot."""
     @dataclass
     class Config:
         plot_stability: bool = True
         norm_counts: bool = True
         sig: float = 0.05
+        opacity: float = 0.7
 
     def __init__(self, cores: Partition, partitions: list[Partition], **kwargs):
         self.cores = cores
@@ -92,13 +95,12 @@ class UpSetPlot:
 
         return df
 
-    @staticmethod
-    def __color_cores(labels: list[str], opacity: float=0.5) -> list[tuple[str, tuple[float, ...]]]:
+    def __color_cores(self, labels: list[str]) -> list[tuple[str, tuple[float, ...]]]:
         """Assign a color to each core."""
         n = len(labels)
         colors = (COLORS * (n // len(COLORS) + 1))[:n]  # Reuse colors if needed
         colors = [color.lstrip("#") for color in colors]
-        colors = [tuple(int(color[i:i + 2], 16) / 255 for i in (0, 2, 4)) + (opacity,) for color in colors]
+        colors = [tuple(int(color[i:i + 2], 16) / 255 for i in (0, 2, 4)) + (self.cfg.opacity,) for color in colors]
         return [(label, color) for label, color in zip(labels, colors)]
 
     def _style_ax(self, ax: dict[str, plt.Axes], grid_lw: float = 0.25, tick_lw = 0.5) -> None:
@@ -120,7 +122,8 @@ class UpSetPlot:
         ax["matrix"].set_yticklabels(new_labels)
 
         if self.cfg.plot_stability:
-            delta = (self.max_stability - self.min_stability) / 6
+            #delta = (self.max_stability - self.min_stability) / 6
+            delta = 0
             ax["totals"].set_xlabel("Stability")
             ax["totals"].set_xlim(self.max_stability, self.min_stability - delta)
             ax["totals"].set_xticks([self.max_stability, self.min_stability])
