@@ -141,7 +141,7 @@ class GeoPlot:
         """Sets figure legend."""
         self.fig.update_layout(
             legend={
-                "font_size": 36,
+                "font_size": 24,
                 "orientation": "h",
                 "yanchor": "top",
                 "y": 0.04,
