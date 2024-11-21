@@ -22,6 +22,7 @@ class CentralityIndex:
 
 @dataclass
 class CentralityRegistry:
+    """Class to behave as registry of CentralityIndex."""
     _registry_map: dict[str, CentralityIndex] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -34,14 +35,17 @@ class CentralityRegistry:
         self.register("excess", excess, CentralityScale.DIVERGING),
 
     def register(self, name: str, compute: Callable[..., NodeMetric], scale: CentralityScale) -> None:
+        """Add CentralityIndex to the registry."""
         self._registry_map[name] = CentralityIndex(compute, scale)
 
     def get(self, name: str) -> CentralityIndex:
+        """Get CentraltyIndex from its name."""
         if name not in self._registry_map:
             raise ValueError(f"Metric '{name}' is not found.")
         return self._registry_map[name]
 
     def registered_centralities(self):
+        """Get list of registered CentralityIndex."""
         return list(self._registry_map.keys())
 
 
