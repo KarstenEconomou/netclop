@@ -4,15 +4,16 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import Optional, Sequence
 
+import networkx as nx
 import numpy as np
 from infomap import Infomap
 
+import netclop.ensemble.centrality as centrality
 from netclop.constants import SEED
 from netclop.ensemble.netutils import flatten_partition
-from netclop.ensemble.centrality import *
 from netclop.ensemble.sigclu import SigClu
 from netclop.exceptions import MissingResultError
-from netclop.typing import NodeSet, Partition
+from netclop.typing import NodeSet, Partition, NodeMetric
 
 
 class NetworkEnsemble:
@@ -113,8 +114,8 @@ class NetworkEnsemble:
         centrality_functions = {
             "out-degree": nx.out_degree_centrality,
             "in-degree": nx.in_degree_centrality,
-            "out-strength": out_strength,
-            "in-strength": in_strength,
+            "out-strength": centrality.out_strength,
+            "in-strength": centrality.in_strength,
             "betweenness": nx.betweenness_centrality,
             "pagerank": nx.pagerank,
         }
