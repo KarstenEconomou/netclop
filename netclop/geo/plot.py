@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import shapely
 
 from netclop.constants import COLORS
-from netclop.typing import CentralityNodes, NodeSet, Partition
+from netclop.typing import NodeMetric, NodeSet, Partition
 
 
 class GeoPlot:
@@ -49,7 +49,7 @@ class GeoPlot:
 
     def plot_centrality(
         self,
-        node_centrality: CentralityNodes,
+        node_centrality: NodeMetric,
         centrality_index: str="Centrality",
         path: Optional[PathLike] = None,
     ) -> None:
