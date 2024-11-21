@@ -39,12 +39,13 @@ class CentralityRegistry:
         self._registry_map[name] = CentralityIndex(compute, scale)
 
     def get(self, name: str) -> CentralityIndex:
-        """Get CentraltyIndex from its name."""
+        """Get CentralityIndex from its name."""
         if name not in self._registry_map:
             raise ValueError(f"Metric '{name}' is not found.")
         return self._registry_map[name]
 
-    def registered_centralities(self):
+    @property
+    def registered(self):
         """Get list of registered CentralityIndex."""
         return list(self._registry_map.keys())
 

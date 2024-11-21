@@ -103,7 +103,7 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 @click.option(
     "--centrality",
     "-c",
-    type=click.Choice(centrality_registry.registered_centralities(), case_sensitive=False),
+    type=click.Choice(centrality_registry.registered, case_sensitive=False),
     multiple=True,
     help="Node centrality indices to compute and plot."
 )
