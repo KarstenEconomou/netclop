@@ -6,9 +6,11 @@ from typing import Optional, Self, Sequence
 import geopandas as gpd
 import h3.api.numpy_int as h3
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import shapely
 
+from netclop.ensemble.centrality import CentralityScale, centrality_registry
 from netclop.constants import COLORS
 from netclop.typing import NodeMetric, NodeSet, Partition
 
@@ -49,24 +51,34 @@ class GeoPlot:
 
     def plot_centrality(
         self,
-        node_centrality: NodeMetric,
-        centrality_index: str="Centrality",
-        path: Optional[PathLike] = None,
+        metric: NodeMetric,
+        index: str="Centrality",
+        path: Optional[PathLike]=None,
     ) -> None:
         """Plot centrality index."""
         self.fig = go.Figure()
 
         gdf = self.gdf
-        gdf[centrality_index] = gdf["node"].map(node_centrality)
+        gdf[index] = gdf["node"].map(metric)
+
+        scale = centrality_registry.get(index).scale
+        match scale:
+            case CentralityScale.SEQUENTIAL:
+                colorscale = px.colors.sequential.Viridis
+                zmid = None
+            case CentralityScale.DIVERGING:
+                colorscale = px.colors.diverging.RdBu
+                zmid = 0
 
         self.fig.add_trace(go.Choropleth(
             geojson=self.geojson,
             locations=gdf.index,
-            z=gdf[centrality_index],
+            z=gdf[index],
+            zmid=zmid,
             marker={"line": {"width": 0.1, "color": "white"}},
             showscale=True,
-            colorbar=dict(title=centrality_index.capitalize()),
-            colorscale="Viridis",
+            colorscale=colorscale,
+            colorbar=dict(title=index.capitalize()),
         ))
 
         self._set_layout()

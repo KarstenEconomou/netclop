@@ -8,12 +8,12 @@ import networkx as nx
 import numpy as np
 from infomap import Infomap
 
-import netclop.ensemble.centrality as centrality
 from netclop.constants import SEED
+from netclop.ensemble.centrality import centrality_registry
 from netclop.ensemble.netutils import flatten_partition
 from netclop.ensemble.sigclu import SigClu
 from netclop.exceptions import MissingResultError
-from netclop.typing import NodeSet, Partition, NodeMetric
+from netclop.typing import NodeMetric, NodeSet, Partition
 
 
 class NetworkEnsemble:
@@ -109,19 +109,9 @@ class NetworkEnsemble:
         if upset_config is not None:
             sc.upset(**upset_config)
 
-    def node_centrality(self, centrality_index: str, use_bootstraps: bool=False, **kwargs) -> NodeMetric:
+    def node_centrality(self, name: str, use_bootstraps: bool=False, **kwargs) -> NodeMetric:
         """Compute node centrality indices."""
-        centrality_functions = {
-            "out-degree": nx.out_degree_centrality,
-            "in-degree": nx.in_degree_centrality,
-            "out-strength": centrality.out_strength,
-            "in-strength": centrality.in_strength,
-            "betweenness": nx.betweenness_centrality,
-            "pagerank": nx.pagerank,
-            "excess": centrality.excess,
-        }
-        if not (centrality_func := centrality_functions.get(centrality_index.lower())):
-            raise ValueError(f"Unknown centrality index: {centrality_index}")
+        index = centrality_registry.get(name)
 
         if use_bootstraps and not self.is_bootstrapped():
             raise MissingResultError()
@@ -131,11 +121,11 @@ class NetworkEnsemble:
 
             nets = self.nets if not use_bootstraps else self.bootstraps
             for net in nets:
-                centrality_list.append(centrality_func(net, **kwargs))
+                centrality_list.append(index.compute(net, **kwargs))
 
             return self.avg_node_centrality(centrality_list)
         else:
-            return centrality_func(self.nets[0], **kwargs)
+            return index.compute(self.nets[0], **kwargs)
 
     @staticmethod
     def avg_node_centrality(node_centralities: list[NodeMetric]) -> NodeMetric:

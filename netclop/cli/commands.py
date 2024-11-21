@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 
 from netclop.constants import SEED
+from netclop.ensemble.centrality import centrality_registry
 from netclop.ensemble.ensemble import NetworkEnsemble
 from netclop.ensemble.sigclu import SigClu
 from netclop.geo import GeoNet, GeoPlot
@@ -102,10 +103,7 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 @click.option(
     "--centrality",
     "-c",
-    type=click.Choice(
-        ["out-degree", "in-degree", "out-strength", "in-strength", "pagerank", "betweenness", "excess"],
-        case_sensitive=False,
-    ),
+    type=click.Choice(centrality_registry.registered_centralities(), case_sensitive=False),
     multiple=True,
     help="Node centrality indices to compute and plot."
 )
