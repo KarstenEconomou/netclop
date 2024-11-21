@@ -103,7 +103,7 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
     "--centrality",
     "-c",
     type=click.Choice(
-        ["out-degree", "in-degree", "out-strength", "in-strength", "pagerank", "betweenness"],
+        ["out-degree", "in-degree", "out-strength", "in-strength", "pagerank", "betweenness", "excess"],
         case_sensitive=False,
     ),
     multiple=True,

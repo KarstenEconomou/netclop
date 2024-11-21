@@ -118,6 +118,7 @@ class NetworkEnsemble:
             "in-strength": centrality.in_strength,
             "betweenness": nx.betweenness_centrality,
             "pagerank": nx.pagerank,
+            "excess": centrality.excess,
         }
         if not (centrality_func := centrality_functions.get(centrality_index.lower())):
             raise ValueError(f"Unknown centrality index: {centrality_index}")

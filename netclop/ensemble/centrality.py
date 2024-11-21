@@ -13,3 +13,8 @@ def out_strength(net: nx.DiGraph, **kwargs) -> NodeMetric:
 def in_strength(net: nx.DiGraph, **kwargs) -> NodeMetric:
     """Compute the in-strength of nodes."""
     return dict((node, in_str) for node, in_str in net.in_degree(weight=WEIGHT_ATTR))
+
+def excess(net: nx.DiGraph, **kwargs) -> NodeMetric:
+    out_str = out_strength(net, **kwargs)
+    in_str = in_strength(net, **kwargs)
+    return dict((n, o - i) for n, o, i in zip(out_str.keys(), out_str.values(), in_str.values()))
