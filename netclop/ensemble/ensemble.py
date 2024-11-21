@@ -8,8 +8,8 @@ import networkx as nx
 import numpy as np
 from infomap import Infomap
 
+from netclop.centrality import centrality_registry
 from netclop.constants import SEED
-from netclop.ensemble.centrality import centrality_registry
 from netclop.ensemble.netutils import flatten_partition
 from netclop.ensemble.sigclu import SigClu
 from netclop.exceptions import MissingResultError

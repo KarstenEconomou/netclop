@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from enum import Flag, auto
 from typing import Callable
 
-from netclop.ensemble.centrality_compute import *
+from netclop.centrality.centrality_compute import *
 from netclop.typing import NodeMetric
 
 

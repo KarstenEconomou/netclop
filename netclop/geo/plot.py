@@ -10,7 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import shapely
 
-from netclop.ensemble.centrality import CentralityScale, centrality_registry
+from netclop.centrality import CentralityScale, centrality_registry
 from netclop.constants import COLORS
 from netclop.typing import NodeMetric, NodeSet, Partition
 
