@@ -12,6 +12,7 @@ from netclop.ensemble.netutils import flatten_partition
 from netclop.ensemble.upsetplot import UpSetPlot
 from netclop.exceptions import MissingResultError
 from netclop.typing import Node, NodeSet, Partition
+from netclop.log import Logger
 
 type Size = int
 Score = namedtuple("Score", ["size", "pen"], defaults=[0, 0])
@@ -26,26 +27,23 @@ class SigClu:
         temp_init: float = 10.0
         cooling_rate: float = 0.99
         decay_rate: float = 1.0
-        pen_scalar: float = 20.0
+        pen_scalar: float = 2.0
         rep_scalar: int = 1
         min_core_size: Size = 6
         num_trials: int = 1
-        num_exhaustion_loops: int = 40
+        num_exhaustion_loops: int = 10
         max_sweeps: int = 1000
         initialize_all: bool = True,
-        verbose: bool = False
 
-    def __init__(self, partitions: list[Partition], **config_options):
-        self.partitions = partitions
+    def __init__(self, partitions: list[Partition], logger: Logger = None, silent: bool = False, **config_options):
+        self.logger = Logger(silent=silent) if logger is None else logger
         self.cfg = self.Config(**config_options)
+
+        self.partitions = partitions
 
         self.rng = np.random.default_rng(self.cfg.seed)
 
         self.cores: Optional[Partition] = None
-
-    def _log(self, msg: str) -> None:
-        """Log message."""
-        if self.cfg.verbose: print(msg)
 
     @cached_property
     def nodes(self) -> NodeSet:
@@ -65,73 +63,59 @@ class SigClu:
 
     def run(self) -> None:
         """Find robust cores."""
+        self.logger.log(
+            f"Running recursive significance clustering on {len(self.partitions)} partitions: "
+            f"level {self.cfg.sig}, init temp {self.cfg.temp_init}, cool rate {self.cfg.cooling_rate}, " 
+            f"min size {self.cfg.min_core_size}"
+        )
         cores = []
 
         # Loop to find each core above min size threshold
         avail_nodes = set(self.nodes)
-        while True:
-            if len(avail_nodes) < self.cfg.min_core_size:
-                break
+        pbar = self.logger.make_pbar(desc="Significance clustering", unit="core")
 
-            self._log("=" * 6)
-            self._log(f"Core {len(cores) + 1}")
-            self._log("=" * 6)
-            self._log(f"Searching: {len(avail_nodes)} nodes")
+        while len(avail_nodes) >= self.cfg.min_core_size:
+            self.logger.pbar_info(pbar, f"{len(avail_nodes)}avail")
             core = self._find_core_sanitized(avail_nodes)
             if core is not None:
                 avail_nodes.difference_update(core)  # Nodes in core are not available in future iters
-                self._add_core(core, cores)
+                cores.append(core)
                 self._sort_by_size(cores)
+
+                self.logger.update_pbar(pbar)
             else:
-                self._log(f"Core {len(cores) + 1} rejected")
                 break
 
+        self.logger.close_pbar(pbar)
         self.cores = cores
-
-    def _add_core(self, core: NodeSet, cores: Partition) -> None:
-        """Add a core to core list, merging with a larger core if possible."""
-        if len(cores) > 0:
-            for i, prev_core in enumerate(cores):  # Cores are sorted in descending order of size
-                merged_core = core.union(prev_core)
-                if self._all_form_core(merged_core):
-                    cores[i] = merged_core
-                    self._log(f"Core {len(cores) + 1} merged with Core {i + 1}, size {self._measure_size(merged_core)}")
-                    return
-
-        self._log(f"Core {len(cores) + 1} found: size {self._measure_size(core)}")
-        cores.append(core)
-
-    def _sort_by_size(self, cores: Partition) -> None:
-        """Manually sort cores from largest to smallest."""
-        cores.sort(key=self._measure_size, reverse=True)
+        self.logger.log(f"core sizes: {', '.join(map(str, [len(core) for core in cores]))}")
 
     def _find_core_sanitized(self, nodes: NodeSet, exhaustion_search: bool=True) -> Optional[NodeSet]:
         """Perform simulated annealing with wrapper for restarts."""
         if self._is_trivial(nodes) or self._all_form_core(nodes):
             return nodes
 
-        self._log("-" * 6)
         best_state, best_score = {}, 0
         for i in range(self.cfg.num_trials):
             state, (size, pen) = self._find_core(nodes)
             score = size - pen
-            self._log(f"Trial {i+1}/{self.cfg.num_trials}: size {size} with penalty {pen:.1f}")
 
             if score > best_score and pen == 0:
                 best_state, best_score = state, score
-        self._log("-" * 6)
 
         if best_score < self.cfg.min_core_size:
             # Best state is not of substantial size to be labelled a core
             # Begin exhaustion search to try to find small, but above threshold cores
             if exhaustion_search:
-                for i in range(self.cfg.num_exhaustion_loops):
-                    self._log(f"Exhaustion loop {i + 1}/{self.cfg.num_exhaustion_loops}")
+                for _ in self.logger.pbar(
+                        range(self.cfg.num_exhaustion_loops),
+                        desc="Exhaustion search",
+                        leave=False,
+                ):
                     best_state = self._find_core_sanitized(nodes, exhaustion_search=False)
                     if best_state is not None:
                         return best_state
             return None
-
         return best_state
 
     def _find_core(self, nodes: NodeSet) -> tuple[NodeSet, Score]:
@@ -145,7 +129,12 @@ class SigClu:
         temp = self.cfg.temp_init
 
         # Core loop
-        for t in range(self.cfg.max_sweeps):
+        for t in (pbar := self.logger.pbar(
+            range(self.cfg.max_sweeps),
+            length=False,
+            leave=False,
+        )):
+            self.logger.pbar_info(pbar, f"{temp:.2f}temp, {score.size}size, {score.pen:.2f}pen")
             did_accept = False
 
             num_repetitions = self._num_repetitions(t, len(nodes))
@@ -173,7 +162,18 @@ class SigClu:
             if trial_score.pen == 0:
                 state, score = trial_state, trial_score
 
+        self.logger.pbar_info(pbar, f"{temp:.2f}temp, {score.size}size, {score.pen:.2f}pen")
+        self.logger.close_pbar(pbar)
+
         return state, score
+
+    def _measure_size(self, nodes: NodeSet) -> Size:
+        """Calculate a measure of size on a node set."""
+        return len(nodes)
+
+    def _sort_by_size(self, cores: Partition) -> None:
+        """Manually sort cores from largest to smallest."""
+        cores.sort(key=self._measure_size, reverse=True)
 
     def _make_penalty_weight(self, nodes: NodeSet) -> float:
         """Calculate the weight of a penalty in scoring."""
@@ -182,10 +182,6 @@ class SigClu:
 
         # Scale by desired weight of penalty
         return self.cfg.pen_scalar * pen_weight
-
-    def _measure_size(self, nodes: NodeSet) -> Size:
-        """Calculate a measure of size on a node set."""
-        return len(nodes)
 
     def _score(self, nodes: NodeSet, pen_weighting: float) -> Score:
         """Calculate measure of size for node set and penalty across partitions."""

@@ -6,13 +6,15 @@ from typing import Optional, Sequence
 
 import networkx as nx
 import numpy as np
+import pandas as pd
 from infomap import Infomap
 
 from netclop.centrality import centrality_registry
-from netclop.constants import SEED
-from netclop.ensemble.netutils import flatten_partition
+from netclop.constants import SEED, WEIGHT_ATTR
+from netclop.ensemble.netutils import flatten_partition, label_partition
 from netclop.ensemble.sigclu import SigClu
 from netclop.exceptions import MissingResultError
+from netclop.log import Logger
 from netclop.typing import NodeMetric, NodeSet, Partition
 
 
@@ -26,9 +28,17 @@ class NetworkEnsemble:
         im_variable_markov_time: bool = True
         im_num_trials: int = 5
 
-    def __init__(self, net: nx.DiGraph | Sequence[nx.DiGraph], **config_options):
-        self.nets = net if isinstance(net, Sequence) else [net]
+    def __init__(
+        self,
+        net: nx.DiGraph | Sequence[nx.DiGraph],
+        logger: Logger = None,
+        silent: bool = False,
+        **config_options
+    ):
+        self.logger = Logger(silent=silent) if logger is None else logger
         self.cfg = self.Config(**config_options)
+
+        self.nets = net if isinstance(net, Sequence) else [net]
 
         self.bootstraps: Optional[list[nx.DiGraph]] = None
         self.partitions: Optional[list[Partition]] = None
@@ -44,6 +54,19 @@ class NetworkEnsemble:
             raise MissingResultError()
         return self.nodes.difference(flatten_partition(self.cores))
 
+    def to_nodelist(self, metrics: Optional[dict[str, NodeMetric]]=None) -> pd.DataFrame:
+        """Create a node list."""
+        df = pd.DataFrame({"node": list(self.nodes)})
+
+        if metrics is not None:
+            for index, value in metrics.items():
+                df[index] = df["node"].map(value)
+
+        if self.cores is not None:
+            df["core"] = df["node"].map(label_partition(self.cores))
+
+        return df
+
     def is_ensemble(self) -> bool:
         """Check if an ensemble of nets is stored."""
         return len(self.nets) > 1
@@ -55,13 +78,23 @@ class NetworkEnsemble:
     def partition(self) -> None:
         """Partition networks."""
         if self.is_ensemble():
-            self.partitions = [self.im_partition(net) for net in self.nets]
+            nets = self.nets
         else:
-            self.bootstrap(self.nets[0])
-            self.partitions = [self.im_partition(bootstrap) for bootstrap in self.bootstraps]
+            if not self.is_bootstrapped():
+                self.bootstrap(self.nets[0])
+            nets = self.bootstraps
+
+        self.logger.log(
+            f"Partitioning {len(nets)} networks with Infomap: "
+            f"mt {self.cfg.im_markov_time} {"(variable)" if self.cfg.im_variable_markov_time else "(static)"}"
+        )
+        self.partitions = [
+            self.im_partition(net) for net in self.logger.pbar(nets, desc="Community detection", unit="net")
+        ]
+        self.logger.log(f"{self.logger.stat([len(part) for part in self.partitions])} modules")
 
     def im_partition(self, net: nx.DiGraph) -> Partition:
-        """Partitions a network."""
+        """Partition a network with Infomap."""
         im = Infomap(
             silent=True,
             two_level=True,
@@ -79,7 +112,8 @@ class NetworkEnsemble:
 
     def bootstrap(self, net: nx.DiGraph) -> None:
         """Resample edge weights."""
-        edges, weights = zip(*nx.get_edge_attributes(net, 'weight').items())
+        self.logger.log(f"Resampling {self.cfg.num_bootstraps} networks.")
+        edges, weights = zip(*nx.get_edge_attributes(net, WEIGHT_ATTR).items())
         weights = np.array(weights)
         num_edges = len(edges)
 
@@ -87,20 +121,21 @@ class NetworkEnsemble:
         new_weights = rng.poisson(lam=weights.reshape(1, -1), size=(self.cfg.num_bootstraps, num_edges))
 
         bootstraps = []
-        for i in range(self.cfg.num_bootstraps):
+        for i in self.logger.pbar(range(self.cfg.num_bootstraps), desc="Net construction", unit="net"):
             bootstrap = net.copy()
-            edge_attrs = {edges[j]: {"weight": new_weights[i, j]} for j in range(num_edges)}
+            edge_attrs = {edges[j]: {WEIGHT_ATTR: new_weights[i, j]} for j in range(num_edges)}
             nx.set_edge_attributes(bootstrap, edge_attrs)
             bootstraps.append(bootstrap)
         self.bootstraps = bootstraps
 
-    def sigclu(self, upset_config: dict=None, **kwargs) -> None:
+    def sigclu(self, upset_config: dict = None, **kwargs) -> None:
         """Computes recursive significance clustering on partition ensemble."""
         if self.partitions is None:
             self.partition()
 
         sc = SigClu(
             self.partitions,
+            logger=self.logger,
             **kwargs
         )
         sc.run()
@@ -109,7 +144,7 @@ class NetworkEnsemble:
         if upset_config is not None:
             sc.upset(**upset_config)
 
-    def node_centrality(self, name: str, use_bootstraps: bool=False, **kwargs) -> NodeMetric:
+    def node_centrality(self, name: str, use_bootstraps: bool = False, **kwargs) -> NodeMetric:
         """Compute node centrality indices."""
         index = centrality_registry.get(name)
 
@@ -133,13 +168,9 @@ class NetworkEnsemble:
         centrality_sums = defaultdict(float)
         node_counts = defaultdict(int)
 
-        # Sum centrality values and count occurrences for each node
         for centrality_dict in node_centralities:
             for node, value in centrality_dict.items():
                 centrality_sums[node] += value
                 node_counts[node] += 1
 
-        # Compute average for each node
-        avg_centrality = dict((node, centrality_sums[node] / node_counts[node]) for node in centrality_sums)
-
-        return avg_centrality
+        return dict((node, centrality_sums[node] / node_counts[node]) for node in centrality_sums)

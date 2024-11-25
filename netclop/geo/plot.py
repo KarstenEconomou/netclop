@@ -30,7 +30,7 @@ class GeoPlot:
             width = 3.375
             height = width / 2 # inches
             dpi = 900
-            self.fig.write_image(path, width=width * dpi, height=height * dpi, scale=1.0)
+            self.fig.write_image(path, width=width * dpi, height=height * dpi, scale=1.0, format="png")
 
     def show(self) -> None:
         """Show plot."""

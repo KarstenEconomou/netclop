@@ -159,7 +159,7 @@ class UpSetPlot:
         ax = upset.plot(fig=fig)
         self._style_ax(ax)
 
-        plt.savefig(path, bbox_inches="tight")
+        plt.savefig(path, bbox_inches="tight", format="png")
 
     def plot(self, path: PathLike):
         """Produce plot."""

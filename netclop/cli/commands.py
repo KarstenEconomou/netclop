@@ -1,15 +1,18 @@
 """Commands for the CLI."""
+import importlib.metadata
 import warnings
 from pathlib import Path
 
 import click
 
-from netclop.constants import SEED
 from netclop.centrality.centrality import centrality_registry
+from netclop.constants import SEED
 from netclop.ensemble.ensemble import NetworkEnsemble
 from netclop.ensemble.sigclu import SigClu
-from netclop.geo import GeoNet, GeoPlot
 from netclop.ensemble.upsetplot import UpSetPlot
+from netclop.geo import GeoNet, GeoPlot
+from netclop.log import Logger
+from netclop.cli.files import make_run_id, make_filepath
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
@@ -122,13 +125,17 @@ def rsc(
     norm_counts,
     centrality,
 ):
-    """Run recursive significance clustering from LPT positions."""
+    """Run recursive significance clustering from LPT simulations."""
+    # Set up run and logging
+    run_id = make_run_id(seed)
+    path = Path(output_dir) / run_id
+    logger = Logger(file=make_filepath(path, extension="log"))
+    logger.log(f"netclop v{importlib.metadata.version("netclop")}: run {run_id}")
+    logger.log(f"LPT paths {paths}", level="DEBUG")
+    logger.log(f"output path '{output_dir}'", level="DEBUG")
+
     # Make networks from LPT
-    if len(paths) == 1:
-        net = GeoNet(res=res).net_from_lpt(paths[0])
-    else:
-        gn = GeoNet(res=res)
-        net = [gn.net_from_lpt(path) for path in paths]
+    net = GeoNet(res=res, logger=logger).from_lpt(paths)
 
     # Significance cluster network ensemble
     ne = NetworkEnsemble(
@@ -137,15 +144,15 @@ def rsc(
         im_markov_time=markov_time,
         im_variable_markov_time=variable_markov_time,
         im_num_trials=num_trials,
+        logger=logger,
     )
-
     ne.sigclu(
         seed=seed,
         sig=sig,
         cooling_rate=cooling_rate,
         min_core_size=min_core_size,
         upset_config={
-            "path": Path(output_dir) / "upset.png",
+            "path": make_filepath(path, "upset"),
             "plot_stability": plot_stability,
             "norm_counts": norm_counts,
         },
@@ -153,12 +160,12 @@ def rsc(
 
     # Plot structure
     gp = GeoPlot.from_cores(ne.cores, ne.unstable_nodes)
-    gp.plot_structure(path=Path(output_dir) / "geo.png")
+    gp.plot_structure(path=make_filepath(path, "geo"))
 
     # Plot centrality
     for centrality_index in centrality:
         gp.plot_centrality(
             ne.node_centrality(centrality_index),
             centrality_index,
-            path=Path(output_dir) / f"centrality_{centrality_index.replace('-', '')}.png"
+            path=make_filepath(path, f"c_{centrality_index.replace('-', '')}")
         )
