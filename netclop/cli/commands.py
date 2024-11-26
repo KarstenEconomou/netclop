@@ -1,5 +1,5 @@
 """Commands for the CLI."""
-import importlib.metadata
+from importlib.metadata import version
 import warnings
 from pathlib import Path
 
@@ -127,10 +127,10 @@ def rsc(
 ):
     """Run recursive significance clustering from LPT simulations."""
     # Set up run and logging
-    run_id = make_run_id(seed)
+    run_id = make_run_id(seed, sig)
     path = Path(output_dir) / run_id
     logger = Logger(file=make_filepath(path, extension="log"))
-    logger.log(f"netclop v{importlib.metadata.version("netclop")}: run {run_id}")
+    logger.log(f"netclop v{version("netclop")}: run {run_id}")
     logger.log(f"LPT paths {paths}", level="DEBUG")
     logger.log(f"output path '{output_dir}'", level="DEBUG")
 
@@ -163,9 +163,12 @@ def rsc(
     gp.plot_structure(path=make_filepath(path, "geo"))
 
     # Plot centrality
-    for centrality_index in centrality:
+    metrics = dict()
+    for index in centrality:
+        metrics[index] = ne.node_centrality(index)
         gp.plot_centrality(
-            ne.node_centrality(centrality_index),
-            centrality_index,
-            path=make_filepath(path, f"c_{centrality_index.replace('-', '')}")
+            metrics[index],
+            index,
+            path=make_filepath(path, f"c_{index.replace('-', '')}")
         )
+    ne.to_nodelist(metrics).to_csv(make_filepath(path, extension="csv"), index=False)

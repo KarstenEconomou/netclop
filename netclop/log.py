@@ -5,7 +5,7 @@ import numpy as np
 from tqdm.auto import tqdm
 from loguru import logger
 
-fmt = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "\
+fmt = "<cyan>{time:YYYY-MM-DD HH:mm:ss.SSS}</cyan> | "\
       "<level>{level: <8}</level> | "\
       "<level>{message}</level>"
 
@@ -22,6 +22,7 @@ logger.add(
 class Logger:
     """Class for algorithm logging."""
     ascii = " =#"
+    color = "GREEN"
 
     def __init__(self, file: PathLike = None, silent: bool = False):
         if file is not None:
@@ -29,12 +30,12 @@ class Logger:
             logger.add(sink=file, format=fmt)
         self.silent = silent
 
-    def log(self, msg: str, level="INFO") -> None:
+    def log(self, msg: str, level="INFO", **kwargs) -> None:
         """Log info."""
         if not self.silent:
             match level:
-                case "INFO": logger.info(msg)
-                case "DEBUG": logger.debug(msg)
+                case "INFO": logger.info(msg, **kwargs)
+                case "DEBUG": logger.debug(msg, **kwargs)
 
     def pbar(self, iterable: Iterable, length: bool = True, **kwargs) -> tqdm | Iterable:
         """Make a tqdm progress bar."""
@@ -44,7 +45,7 @@ class Logger:
         if not length:
             iterable = iter(iterable)
 
-        return tqdm(iterable, ascii=self.ascii, **kwargs)
+        return tqdm(iterable, ascii=self.ascii, colour=self.color, **kwargs)
 
     # Manual progress bar
     def pbar_info(self, pbar: tqdm | Iterable, info: str) -> None:
@@ -55,7 +56,7 @@ class Logger:
     def make_pbar(self, **kwargs):
         """Make a tqdm progress bar for manual usage."""
         if not self.silent:
-            return tqdm(ascii=self.ascii, **kwargs)
+            return tqdm(ascii=self.ascii, colour=self.color, **kwargs)
         else:
             return None
 

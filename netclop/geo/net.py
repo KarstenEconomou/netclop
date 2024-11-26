@@ -61,11 +61,14 @@ class GeoNet:
         )
         if len(paths) == 1:
             net = self.make_lpt_net(paths[0])
+            self.logger.log(
+                f"{len(net.nodes)} nodes, "
+                f"{len(net.edges)} edges"
+            )
         else:
             net = [self.make_lpt_net(path) for path in self.logger.pbar(paths, desc="Net construction", unit="net")]
-
-        self.logger.log(
-            f"{self.logger.stat([len(n.nodes) for n in net])} nodes, "
-            f"{self.logger.stat([len(n.edges) for n in net])} edges"
-        )
+            self.logger.log(
+                f"{self.logger.stat([len(n.nodes) for n in net])} nodes, "
+                f"{self.logger.stat([len(n.edges) for n in net])} edges"
+            )
         return net

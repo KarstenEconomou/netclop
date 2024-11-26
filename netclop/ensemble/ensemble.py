@@ -54,16 +54,16 @@ class NetworkEnsemble:
             raise MissingResultError()
         return self.nodes.difference(flatten_partition(self.cores))
 
-    def to_nodelist(self, metrics: Optional[dict[str, NodeMetric]]=None) -> pd.DataFrame:
+    def to_nodelist(self, metrics: Optional[dict[str, NodeMetric]] = None) -> pd.DataFrame:
         """Create a node list."""
         df = pd.DataFrame({"node": list(self.nodes)})
+
+        if self.cores is not None:
+            df["core"] = df["node"].map(label_partition(self.cores)).fillna(0).astype(int)
 
         if metrics is not None:
             for index, value in metrics.items():
                 df[index] = df["node"].map(value)
-
-        if self.cores is not None:
-            df["core"] = df["node"].map(label_partition(self.cores))
 
         return df
 
@@ -73,7 +73,7 @@ class NetworkEnsemble:
 
     def is_bootstrapped(self) -> bool:
         """Check if replicate networks have been bootstrapped."""
-        return len(self.bootstraps) == self.cfg.num_bootstraps
+        return self.bootstraps is not None
 
     def partition(self) -> None:
         """Partition networks."""

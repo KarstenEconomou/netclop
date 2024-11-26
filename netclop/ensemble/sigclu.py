@@ -88,7 +88,7 @@ class SigClu:
 
         self.logger.close_pbar(pbar)
         self.cores = cores
-        self.logger.log(f"core sizes: {', '.join(map(str, [len(core) for core in cores]))}")
+        self.logger.log(f"{len(cores)} cores, size: {', '.join(map(str, [len(core) for core in cores]))}")
 
     def _find_core_sanitized(self, nodes: NodeSet, exhaustion_search: bool=True) -> Optional[NodeSet]:
         """Perform simulated annealing with wrapper for restarts."""

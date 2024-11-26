@@ -1,11 +1,12 @@
 """Handles output files."""
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 
 
-def make_run_id(prefix):
+def make_run_id(seed: int, sig: float):
     """Make ID number for netclop run."""
-    return str(prefix) + "_" + str(int(datetime.now().timestamp()))
+    return str(seed) + "-" + str(int(sig * 100)) + "-" + str(int(datetime.now().timestamp()))
 
 
 def make_filepath(path: Path, field: str = None, extension: str = "png"):
