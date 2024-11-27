@@ -24,7 +24,7 @@ class SigClu:
     class Config:
         seed: int = SEED
         sig: float = 0.05
-        temp_init: float = 10.0
+        temp_init: float = 1.0
         cooling_rate: float = 0.99
         decay_rate: float = 1.0
         pen_scalar: float = 2.0
@@ -73,7 +73,6 @@ class SigClu:
         # Loop to find each core above min size threshold
         avail_nodes = set(self.nodes)
         pbar = self.logger.make_pbar(desc="Significance clustering", unit="core")
-
         while len(avail_nodes) >= self.cfg.min_core_size:
             self.logger.pbar_info(pbar, f"{len(avail_nodes)}avail")
             core = self._find_core_sanitized(avail_nodes)

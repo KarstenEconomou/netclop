@@ -129,8 +129,8 @@ def rsc(
     # Set up run and logging
     run_id = make_run_id(seed, sig)
     path = Path(output_dir) / run_id
-    logger = Logger(file=make_filepath(path, extension="log"))
-    logger.log(f"netclop v{version("netclop")}: run {run_id}")
+    logger = Logger(path=make_filepath(path, extension="log"))
+    logger.log(f"<y>netclop v{version("netclop")}: run {run_id}</y>")
     logger.log(f"LPT paths {paths}", level="DEBUG")
     logger.log(f"output path '{output_dir}'", level="DEBUG")
 
@@ -159,16 +159,21 @@ def rsc(
     )
 
     # Plot structure
+    logger.log("Plotting spatially-embedded cores.")
     gp = GeoPlot.from_cores(ne.cores, ne.unstable_nodes)
     gp.plot_structure(path=make_filepath(path, "geo"))
 
     # Plot centrality
     metrics = dict()
-    for index in centrality:
-        metrics[index] = ne.node_centrality(index)
-        gp.plot_centrality(
-            metrics[index],
-            index,
-            path=make_filepath(path, f"c_{index.replace('-', '')}")
-        )
-    ne.to_nodelist(metrics).to_csv(make_filepath(path, extension="csv"), index=False)
+    if len(centrality) > 0:
+        logger.log("Computing and plotting node centrality indices.")
+        for index in logger.pbar(centrality):
+            metrics[index] = ne.node_centrality(index)
+            gp.plot_centrality(
+                metrics[index],
+                index,
+                path=make_filepath(path, f"c_{index.replace('-', '')}")
+            )
+
+    logger.log("Saving node list.")
+    ne.to_nodelist(metrics, path=make_filepath(path, extension="csv"))

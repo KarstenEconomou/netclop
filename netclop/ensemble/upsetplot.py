@@ -57,9 +57,9 @@ class UpSetPlot:
                     supcore_key = frozenset(indices)  # Key to identify super-core
 
                     # Check if jointly assigned
-                    if any(supcore.issubset(module) for module in part):
+                    if any(supcore <= module for module in part):
                         # Check if comb is subset of a larger combination already counted
-                        if not any(supcore_key.issubset(prev) for prev in prev_supcores):
+                        if not any(supcore_key <= prev for prev in prev_supcores):
                             prev_supcores.append(supcore_key)  # Save assignment
                             counts[supcore_key] += 1
         return counts

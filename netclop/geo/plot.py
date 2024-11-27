@@ -9,6 +9,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import shapely
+from matplotlib.colors import LinearSegmentedColormap
 
 from netclop.centrality import CentralityScale, centrality_registry
 from netclop.constants import COLORS
@@ -40,7 +41,7 @@ class GeoPlot:
         """Plot structure."""
         self.fig = go.Figure()
 
-        self._color_cores()
+        self._color_node_core()
         for idx, trace_gdf in self._get_traces(self.gdf, "core"):
             self._add_trace_from_gdf(trace_gdf, str(idx))
 
@@ -165,21 +166,23 @@ class GeoPlot:
             },
         )
 
-    def _color_cores(self) -> None:
-        """Assign colors to cores."""
-        noise_color = "#CCCCCC"
-        colors = dict((str(i), color) for i, color in enumerate(COLORS, 1))
+    def _color_node_core(self) -> None:
+        """Assign a color to node corresponding to its core."""
+        noise = "#CCCCCC"
+        colors = {str(i): color for i, color in enumerate(COLORS, 1)}
+        colors_fuzzy = {
+            k: LinearSegmentedColormap.from_list("", [noise, color]) for k, color in colors.items()
+        }
 
         n_colors = len(colors)
         self.gdf["color"] = self.gdf.apply(
-            lambda node: colors[str((int(node["core"]) - 1) % n_colors + 1)]
-            if node["core"]
-            else noise_color,
+            lambda node: colors[str((int(node["core"]) - 1) % n_colors + 1)] if node["core"]
+            else noise,
             axis=1
         )
 
     @classmethod
-    def from_cores(cls, cores: Partition, noise_nodes: Optional[NodeSet]=None) -> Self:
+    def from_cores(cls, cores: Partition, noise_nodes: Optional[NodeSet] = None) -> Self:
         """Make class instance from a set of cores."""
         core_nodes = [(node, i) for i, core in enumerate(cores, 1) for node in core]
         if noise_nodes is not None:

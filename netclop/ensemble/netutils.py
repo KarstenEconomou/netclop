@@ -14,8 +14,8 @@ def flatten_partition(partition: Partition | Sequence[Partition]) -> NodeSet:
 
 def label_partition(partition: Partition) -> NodeMetric:
     """Creates labels for a partition."""
-    labels = dict()
-    labelled = list()
+    labels = {}
+    labelled = []
 
     for label, part in enumerate(partition, 1):
         for node in part:

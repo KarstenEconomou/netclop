@@ -2,6 +2,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import cached_property
+from os import PathLike
 from typing import Optional, Sequence
 
 import networkx as nx
@@ -54,7 +55,7 @@ class NetworkEnsemble:
             raise MissingResultError()
         return self.nodes.difference(flatten_partition(self.cores))
 
-    def to_nodelist(self, metrics: Optional[dict[str, NodeMetric]] = None) -> pd.DataFrame:
+    def to_nodelist(self, metrics: Optional[dict[str, NodeMetric]] = None, path: PathLike = None) -> pd.DataFrame:
         """Create a node list."""
         df = pd.DataFrame({"node": list(self.nodes)})
 
@@ -64,6 +65,9 @@ class NetworkEnsemble:
         if metrics is not None:
             for index, value in metrics.items():
                 df[index] = df["node"].map(value)
+
+        if path is not None:
+            df.to_csv(path, index=False)
 
         return df
 
@@ -142,6 +146,7 @@ class NetworkEnsemble:
         self.cores = sc.cores
 
         if upset_config is not None:
+            self.logger.log("Calculating coalescence frequency and generating UpSet plot.")
             sc.upset(**upset_config)
 
     def node_centrality(self, name: str, use_bootstraps: bool = False, **kwargs) -> NodeMetric:

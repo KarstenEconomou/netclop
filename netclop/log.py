@@ -5,12 +5,11 @@ import numpy as np
 from tqdm.auto import tqdm
 from loguru import logger
 
-fmt = "<cyan>{time:YYYY-MM-DD HH:mm:ss.SSS}</cyan> | "\
+fmt = "<c>{time:YYYY-MM-DD HH:mm:ss.SSS}</c> | "\
       "<level>{level: <8}</level> | "\
       "<level>{message}</level>"
 
 logger.remove()
-# Console handler
 logger.add(
     lambda msg: tqdm.write(msg, end=""),
     colorize=True,
@@ -22,19 +21,18 @@ logger.add(
 class Logger:
     """Class for algorithm logging."""
     ascii = " =#"
-    color = "GREEN"
+    color = "WHITE"
 
-    def __init__(self, file: PathLike = None, silent: bool = False):
-        if file is not None:
-            # File handler
-            logger.add(sink=file, format=fmt)
+    def __init__(self, path: PathLike = None, silent: bool = False):
+        if path is not None:
+            logger.add(path, colorize=False, format=fmt)
         self.silent = silent
 
     def log(self, msg: str, level="INFO", **kwargs) -> None:
         """Log info."""
         if not self.silent:
             match level:
-                case "INFO": logger.info(msg, **kwargs)
+                case "INFO": logger.opt(ansi=True).info(msg, **kwargs)
                 case "DEBUG": logger.debug(msg, **kwargs)
 
     def pbar(self, iterable: Iterable, length: bool = True, **kwargs) -> tqdm | Iterable:
