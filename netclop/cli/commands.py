@@ -1,14 +1,18 @@
 """Commands for the CLI."""
+from importlib.metadata import version
 import warnings
 from pathlib import Path
 
 import click
 
+from netclop.centrality.centrality import centrality_registry
 from netclop.constants import SEED
 from netclop.ensemble.ensemble import NetworkEnsemble
 from netclop.ensemble.sigclu import SigClu
-from netclop.geo import GeoNet, GeoPlot
 from netclop.ensemble.upsetplot import UpSetPlot
+from netclop.geo import GeoNet, GeoPlot
+from netclop.log import Logger
+from netclop.cli.files import make_run_id, make_filepath
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
@@ -102,10 +106,7 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 @click.option(
     "--centrality",
     "-c",
-    type=click.Choice(
-        ["out-degree", "in-degree", "out-strength", "in-strength", "pagerank", "betweenness"],
-        case_sensitive=False,
-    ),
+    type=click.Choice(centrality_registry.registered, case_sensitive=False),
     multiple=True,
     help="Node centrality indices to compute and plot."
 )
@@ -124,13 +125,17 @@ def rsc(
     norm_counts,
     centrality,
 ):
-    """Run recursive significance clustering from LPT positions."""
+    """Run recursive significance clustering from LPT simulations."""
+    # Set up run and logging
+    run_id = make_run_id(seed, sig)
+    path = Path(output_dir) / run_id
+    logger = Logger(path=make_filepath(path, extension="log"))
+    logger.log(f"<y>netclop v{version("netclop")}: run {run_id}</y>")
+    logger.log(f"LPT paths {paths}", level="DEBUG")
+    logger.log(f"output path '{output_dir}'", level="DEBUG")
+
     # Make networks from LPT
-    if len(paths) == 1:
-        net = GeoNet(res=res).net_from_lpt(paths[0])
-    else:
-        gn = GeoNet(res=res)
-        net = [gn.net_from_lpt(path) for path in paths]
+    net = GeoNet(res=res, logger=logger).from_lpt(paths)
 
     # Significance cluster network ensemble
     ne = NetworkEnsemble(
@@ -139,28 +144,36 @@ def rsc(
         im_markov_time=markov_time,
         im_variable_markov_time=variable_markov_time,
         im_num_trials=num_trials,
+        logger=logger,
     )
-
     ne.sigclu(
         seed=seed,
         sig=sig,
         cooling_rate=cooling_rate,
         min_core_size=min_core_size,
         upset_config={
-            "path": Path(output_dir) / "upset.png",
+            "path": make_filepath(path, "upset"),
             "plot_stability": plot_stability,
             "norm_counts": norm_counts,
         },
     )
 
     # Plot structure
+    logger.log("Plotting spatially-embedded cores.")
     gp = GeoPlot.from_cores(ne.cores, ne.unstable_nodes)
-    gp.plot_structure(path=Path(output_dir) / "geo.png")
+    gp.plot_structure(path=make_filepath(path, "geo"))
 
     # Plot centrality
-    for centrality_index in centrality:
-        gp.plot_centrality(
-            ne.node_centrality(centrality_index),
-            centrality_index,
-            path=Path(output_dir) / f"centrality_{centrality_index.replace('-', '')}.png"
-        )
+    metrics = dict()
+    if len(centrality) > 0:
+        logger.log("Computing and plotting node centrality indices.")
+        for index in logger.pbar(centrality):
+            metrics[index] = ne.node_centrality(index)
+            gp.plot_centrality(
+                metrics[index],
+                index,
+                path=make_filepath(path, f"c_{index.replace('-', '')}")
+            )
+
+    logger.log("Saving node list.")
+    ne.to_nodelist(metrics, path=make_filepath(path, extension="csv"))

@@ -6,11 +6,14 @@ from typing import Optional, Self, Sequence
 import geopandas as gpd
 import h3.api.numpy_int as h3
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import shapely
+from matplotlib.colors import LinearSegmentedColormap
 
+from netclop.centrality import CentralityScale, centrality_registry
 from netclop.constants import COLORS
-from netclop.typing import CentralityNodes, NodeSet, Partition
+from netclop.typing import NodeMetric, NodeSet, Partition
 
 
 class GeoPlot:
@@ -28,7 +31,7 @@ class GeoPlot:
             width = 3.375
             height = width / 2 # inches
             dpi = 900
-            self.fig.write_image(path, width=width * dpi, height=height * dpi, scale=1.0)
+            self.fig.write_image(path, width=width * dpi, height=height * dpi, scale=1.0, format="png")
 
     def show(self) -> None:
         """Show plot."""
@@ -38,7 +41,7 @@ class GeoPlot:
         """Plot structure."""
         self.fig = go.Figure()
 
-        self._color_cores()
+        self._color_node_core()
         for idx, trace_gdf in self._get_traces(self.gdf, "core"):
             self._add_trace_from_gdf(trace_gdf, str(idx))
 
@@ -49,24 +52,34 @@ class GeoPlot:
 
     def plot_centrality(
         self,
-        node_centrality: CentralityNodes,
-        centrality_index: str="Centrality",
-        path: Optional[PathLike] = None,
+        metric: NodeMetric,
+        index: str="Centrality",
+        path: Optional[PathLike]=None,
     ) -> None:
         """Plot centrality index."""
         self.fig = go.Figure()
 
         gdf = self.gdf
-        gdf[centrality_index] = gdf["node"].map(node_centrality)
+        gdf[index] = gdf["node"].map(metric)
+
+        scale = centrality_registry.get(index).scale
+        match scale:
+            case CentralityScale.SEQUENTIAL:
+                colorscale = px.colors.sequential.Viridis
+                zmid = None
+            case CentralityScale.DIVERGING:
+                colorscale = px.colors.diverging.RdBu
+                zmid = 0
 
         self.fig.add_trace(go.Choropleth(
             geojson=self.geojson,
             locations=gdf.index,
-            z=gdf[centrality_index],
+            z=gdf[index],
+            zmid=zmid,
             marker={"line": {"width": 0.1, "color": "white"}},
             showscale=True,
-            colorbar=dict(title=centrality_index.capitalize()),
-            colorscale="Viridis",
+            colorscale=colorscale,
+            colorbar=dict(title=index.capitalize()),
         ))
 
         self._set_layout()
@@ -153,21 +166,23 @@ class GeoPlot:
             },
         )
 
-    def _color_cores(self) -> None:
-        """Assign colors to cores."""
-        noise_color = "#CCCCCC"
-        colors = dict((str(i), color) for i, color in enumerate(COLORS, 1))
+    def _color_node_core(self) -> None:
+        """Assign a color to node corresponding to its core."""
+        noise = "#CCCCCC"
+        colors = {str(i): color for i, color in enumerate(COLORS, 1)}
+        colors_fuzzy = {
+            k: LinearSegmentedColormap.from_list("", [noise, color]) for k, color in colors.items()
+        }
 
         n_colors = len(colors)
         self.gdf["color"] = self.gdf.apply(
-            lambda node: colors[str((int(node["core"]) - 1) % n_colors + 1)]
-            if node["core"]
-            else noise_color,
+            lambda node: colors[str((int(node["core"]) - 1) % n_colors + 1)] if node["core"]
+            else noise,
             axis=1
         )
 
     @classmethod
-    def from_cores(cls, cores: Partition, noise_nodes: Optional[NodeSet]=None) -> Self:
+    def from_cores(cls, cores: Partition, noise_nodes: Optional[NodeSet] = None) -> Self:
         """Make class instance from a set of cores."""
         core_nodes = [(node, i) for i, core in enumerate(cores, 1) for node in core]
         if noise_nodes is not None:
