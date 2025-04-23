@@ -138,7 +138,7 @@ class GeoPlot:
                 "coastlinecolor": "black",
                 "coastlinewidth": 0.5,
                 "showland": True,
-                "landcolor": "#EFEFDB",
+                "landcolor": "#F8F9F8",
                 "showlakes": False,
                 "showcountries": True,
             },

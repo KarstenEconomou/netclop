@@ -21,7 +21,7 @@ It functions as a library to computations on network ensembles.
 Developed at the Department of Engineering Mathematics and Internetworking, Dalhousie University by Karsten N. Economou.
 
 ### Papers
-* 2024 - [Characterizing variability in complex network community structure with a recursive significance clustering scheme](https://arxiv.org/abs/2409.12852) (Karsten N. Economou, Cassie R. Norman, Wendy C. Gentleman)
+* 2025 - [Identifying robust features of community structure in complex networks](https://journals.aps.org/pre/abstract/10.1103/PhysRevE.111.044303) (Karsten N. Economou, Cassie R. Norman, Wendy C. Gentleman)
 
 ## Usage
 ### CLI

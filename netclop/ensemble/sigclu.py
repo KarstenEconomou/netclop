@@ -31,7 +31,7 @@ class SigClu:
         rep_scalar: int = 1
         min_core_size: Size = 6
         num_trials: int = 1
-        num_exhaustion_loops: int = 10
+        num_exhaustion_loops: int = 50
         max_sweeps: int = 1000
         initialize_all: bool = True,
 
@@ -76,7 +76,7 @@ class SigClu:
         while len(avail_nodes) >= self.cfg.min_core_size:
             self.logger.pbar_info(pbar, f"{len(avail_nodes)}avail")
             core = self._find_core_sanitized(avail_nodes)
-            if core is not None:
+            if core:
                 avail_nodes.difference_update(core)  # Nodes in core are not available in future iters
                 cores.append(core)
                 self._sort_by_size(cores)
@@ -87,6 +87,7 @@ class SigClu:
 
         self.logger.close_pbar(pbar)
         self.cores = cores
+        cores.pop()
         self.logger.log(f"{len(cores)} cores, size: {', '.join(map(str, [len(core) for core in cores]))}")
 
     def _find_core_sanitized(self, nodes: NodeSet, exhaustion_search: bool=True) -> Optional[NodeSet]:
@@ -102,7 +103,7 @@ class SigClu:
             if score > best_score and pen == 0:
                 best_state, best_score = state, score
 
-        if best_score < self.cfg.min_core_size:
+        if len(best_state) < self.cfg.min_core_size:
             # Best state is not of substantial size to be labelled a core
             # Begin exhaustion search to try to find small, but above threshold cores
             if exhaustion_search:
@@ -112,7 +113,7 @@ class SigClu:
                         leave=False,
                 ):
                     best_state = self._find_core_sanitized(nodes, exhaustion_search=False)
-                    if best_state is not None:
+                    if best_state:
                         return best_state
             return None
         return best_state
@@ -198,17 +199,14 @@ class SigClu:
     def _do_accept_state(self, score: Score, trial_score: Score, temp: float) -> bool:
         """Check if a trial state should be accepted."""
         delta_score = (trial_score.size - trial_score.pen) - (score.size - score.pen)
-        if delta_score >= 0:  # Accept state if better or equal
-            return True
-        elif np.exp(delta_score / temp) >= self.rng.uniform(0, 1):
-            # Metropolis–Hastings algorithm
+        if delta_score >= 0:  # Greedy state acceptance
             return True
         else:
-            return False
+            # Metropolis–Hastings algorithm
+            return np.exp(delta_score / temp) >= self.rng.uniform(0, 1)
 
     def _cool(self, t: int) -> float:
         """Apply exponential cooling schedule."""
-        # return self.cfg.temp_init * (self.cfg.cooling_rate ** (t + 1))
         return self.cfg.temp_init * (self.cfg.cooling_rate ** (t + 1))
 
     def _num_repetitions(self, t: int, n: int) -> int:
@@ -232,7 +230,7 @@ class SigClu:
         """Check if every node forms a core."""
         _, pen = self._score(nodes, 1)
         return pen == 0
-
+ 
     def _nodeset_to_list_ordered(self, nodes: NodeSet) -> list[Node]:
         """Complete type conversion from set to a list ordered by reference index."""
         return sorted(nodes, key=lambda node: self.__node_ref_index[node])

@@ -40,10 +40,10 @@ class UpSetPlot:
 
     @cached_property
     def max_stability(self):
-        """Maximum possibility stability of a core."""
+        """Maximum possible stability of a core."""
         return 1.0 if self.cfg.norm_counts else len(self.partitions)
 
-    def _calc_coalescence_count(self) -> dict[tuple[int, ...], int]:
+    def __calc_coalescence_count(self) -> dict[tuple[int, ...], int]:
         """Counts coalescence of cores across partitions."""
         counts = defaultdict(int)
 
@@ -64,33 +64,32 @@ class UpSetPlot:
                             counts[supcore_key] += 1
         return counts
 
-    def _prep_data(self, counts: dict[tuple[int, ...], int]) -> pd.DataFrame:
+    def __prep_data(self, counts: dict[tuple[int, ...], int]) -> pd.DataFrame:
         """Generates multi-index series from coalescence count data."""
         bools = list(product([True, False], repeat=len(self.cores)))
-        labels = list(range(len(self.cores)))
+        labels = list(range(len(self.cores)))  # Core labels, from zero
 
         multi_index = pd.MultiIndex.from_tuples(bools, names=labels)
         data = pd.Series(0.0, index=multi_index)
 
+        levels = {label: data.index.get_level_values(label) for label in labels}
+
+        norm = len(self.partitions) if self.cfg.norm_counts else 1
+
         for key, count in counts.items():
-            condition = pd.Series([True] * len(data), index=data.index)
-            for label in labels:
-                if label in key:
-                    condition &= data.index.get_level_values(label)
-                else:
-                    condition &= ~data.index.get_level_values(label)
-            data[condition] = count / len(self.partitions) if self.cfg.norm_counts else count
+            masks = [levels[label] == (label in key) for label in labels]
+            condition = np.logical_and.reduce(masks)
+            data[condition] = count / norm
 
-        df = pd.DataFrame({'count': data})
-
+        # Sort    
         def sort_key(index_tuple):
             true_count = sum(index_tuple)
             order = [i for i, val in enumerate(index_tuple) if val]
             return true_count, order
 
+        df = pd.DataFrame({'count': data})
         sorted_index = sorted(df.index, key=sort_key)
         df = df.reindex(sorted_index)
-
         df.index = pd.MultiIndex.from_tuples(df.index, names=labels)
 
         return df
@@ -103,7 +102,7 @@ class UpSetPlot:
         colors = [tuple(int(color[i:i + 2], 16) / 255 for i in (0, 2, 4)) + (self.cfg.opacity,) for color in colors]
         return [(label, color) for label, color in zip(labels, colors)]
 
-    def _style_ax(self, ax: dict[str, plt.Axes], grid_lw: float = 0.25, tick_lw = 0.5) -> None:
+    def __style_ax(self, ax: dict[str, plt.Axes], grid_lw: float = 0.25, tick_lw = 0.5) -> None:
         """Style UpSet plot axes,"""
 
         if self.cfg.norm_counts:
@@ -137,7 +136,7 @@ class UpSetPlot:
         if min_cf == 0: min_cf = 1
         return min_cf
 
-    def _plot(self, data: pd.DataFrame, path: PathLike) -> None:
+    def __plot(self, data: pd.DataFrame, path: PathLike) -> None:
         """Make UpSet plot."""
         plt.rc("font", family="Arial", size=10)
         upset = UpSet(
@@ -157,12 +156,12 @@ class UpSetPlot:
 
         fig = plt.figure(figsize=(3.375, 3.375), dpi=900)
         ax = upset.plot(fig=fig)
-        self._style_ax(ax)
+        self.__style_ax(ax)
 
         plt.savefig(path, bbox_inches="tight", format="png")
 
     def plot(self, path: PathLike):
         """Produce plot."""
-        counts = self._calc_coalescence_count()
-        data = self._prep_data(counts)
-        self._plot(data, path)
+        counts = self.__calc_coalescence_count()
+        data = self.__prep_data(counts)
+        self.__plot(data, path)
